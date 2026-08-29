@@ -1,42 +1,92 @@
 import { useState } from "react"
+import { useMutation, useQuery } from "convex/react"
+import { api } from "@convex/_generated/api"
+import type { Id } from "@convex/_generated/dataModel"
 import AudioRecorder from "../components/teacher/AudioRecorder"
 import SessionPlanForm, { type SessionPlanData } from "../components/teacher/SessionPlanForm"
 import SessionPlanPdf from "../components/teacher/SessionPlanPdf"
 import StudentGroupings from "../components/teacher/StudentGroupings"
+import VapiAssistant from "../components/teacher/VapiAssistant"
+import type { User } from "../App"
 
 interface DocenteModuleProps {
+  user: User
   onBackToDashboard?: () => void
 }
 
-type TabKey = "audio" | "plan_form" | "plan_pdf" | "grouping"
+type TabKey = "aula" | "plan_form" | "plan_pdf" | "grouping"
 
-export default function DocenteModule({ onBackToDashboard }: DocenteModuleProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("audio")
+export default function DocenteModule({ user, onBackToDashboard }: DocenteModuleProps) {
+  const [activeTab, setActiveTab] = useState<TabKey>("aula")
 
-  // Session plan state
-  const [sessionPlan, setSessionPlan] = useState<SessionPlanData>({
-    titulo: "Introducción a Algoritmos y Estructura de Datos",
-    curso: "Programación Orientada a Objetos",
-    grado: "Universitario - Ciclo III",
-    duracion: "90 minutos",
-    fecha: new Date().toISOString().split("T")[0],
-    proposito:
-      "Comprender la diferencia entre estructuras lineales y no lineales, aplicándolas en resolución de problemas en equipo.",
-    inicioActividades:
-      "15 min: Análisis del audio grabado en clase para identificar dudas comunes sobre 'if/else' y activación de conocimientos.",
-    desarrolloActividades:
-      "50 min: Ejercicios guiados en pares heterogéneos (agrupación inteligente). Resolución de 3 casos prácticos en laboratorio.",
-    cierreActividades:
-      "25 min: Quiz interactivo en equipo y resumen colaborativo en pizarra virtual.",
-    evaluacionEstrategia:
-      "Rúbrica de evaluación entre pares y verificación de código resuelto en grupo.",
-    materialesRequeridos:
-      "Proyector, laptops con IDE de desarrollo, guías impresas y plataforma KoEduko.",
+  const planesGuardados = useQuery(api.functions.plans.listPlansByAuthor, {
+    autorEmail: user.email,
   })
+  const savePlan = useMutation(api.functions.plans.savePlan)
 
-  const handleFormSubmit = (data: SessionPlanData) => {
-    setSessionPlan(data)
-    setActiveTab("plan_pdf")
+  // Plan que se está editando. Null significa "uno nuevo": el formulario
+  // arranca con sus valores por defecto.
+  const [planId, setPlanId] = useState<Id<"session_plans"> | null>(null)
+  const [planEditado, setPlanEditado] = useState<SessionPlanData | null>(null)
+  const [guardando, setGuardando] = useState(false)
+  const [planError, setPlanError] = useState("")
+
+  // El plan mostrado sale, en orden: de lo que el docente acaba de editar, del
+  // plan seleccionado en la base, o de los valores por defecto del formulario.
+  const planSeleccionado = planId
+    ? planesGuardados?.find((p) => p._id === planId)
+    : undefined
+
+  const sessionPlan: SessionPlanData | undefined =
+    planEditado ??
+    (planSeleccionado
+      ? {
+          titulo: planSeleccionado.titulo,
+          curso: planSeleccionado.curso,
+          grado: planSeleccionado.grado,
+          duracion: planSeleccionado.duracion,
+          fecha: planSeleccionado.fecha,
+          proposito: planSeleccionado.proposito,
+          inicioActividades: planSeleccionado.inicioActividades,
+          desarrolloActividades: planSeleccionado.desarrolloActividades,
+          cierreActividades: planSeleccionado.cierreActividades,
+          evaluacionEstrategia: planSeleccionado.evaluacionEstrategia,
+          materialesRequeridos: planSeleccionado.materialesRequeridos,
+        }
+      : undefined)
+
+  const handleFormSubmit = async (data: SessionPlanData) => {
+    setPlanError("")
+    setGuardando(true)
+    try {
+      const id = await savePlan({
+        planId: planId ?? undefined,
+        autorEmail: user.email,
+        ...data,
+      })
+      setPlanId(id)
+      setPlanEditado(data)
+      setActiveTab("plan_pdf")
+    } catch (error) {
+      console.error("No se pudo guardar el plan:", error)
+      setPlanError(
+        error instanceof Error ? error.message : "No se pudo guardar el plan."
+      )
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  const handleNuevoPlan = () => {
+    setPlanId(null)
+    setPlanEditado(null)
+    setActiveTab("plan_form")
+  }
+
+  const handleAbrirPlan = (id: Id<"session_plans">) => {
+    setPlanId(id)
+    setPlanEditado(null)
+    setActiveTab("plan_form")
   }
 
   return (
@@ -69,13 +119,13 @@ export default function DocenteModule({ onBackToDashboard }: DocenteModuleProps)
         {/* Navigation Tabs */}
         <nav style={styles.tabsNav}>
           <button
-            onClick={() => setActiveTab("audio")}
+            onClick={() => setActiveTab("aula")}
             style={{
               ...styles.tabBtn,
-              ...(activeTab === "audio" ? styles.activeTabBtn : {}),
+              ...(activeTab === "aula" ? styles.activeTabBtn : {}),
             }}
           >
-            🎙️ 1. Escuchar Salón
+            🎙️ 1. Sesiones y Aula
           </button>
 
           <button
@@ -111,31 +161,130 @@ export default function DocenteModule({ onBackToDashboard }: DocenteModuleProps)
 
         {/* Dynamic Content Views */}
         <div style={styles.contentArea}>
-          {activeTab === "audio" && (
-            <AudioRecorder
-              onAnalysisComplete={() => {
-                // Auto prompt to proceed to session plan
-              }}
-            />
+          {activeTab === "aula" && (
+            <>
+              <VapiAssistant userEmail={user.email} userName={user.nombre} />
+              <AudioRecorder userEmail={user.email} />
+            </>
           )}
 
           {activeTab === "plan_form" && (
-            <SessionPlanForm
-              initialData={sessionPlan}
-              onSubmit={handleFormSubmit}
-            />
+            <>
+              <PlanesGuardados
+                planes={planesGuardados}
+                planIdActivo={planId}
+                onAbrir={handleAbrirPlan}
+                onNuevo={handleNuevoPlan}
+              />
+              {planError && <div style={styles.planError}>⚠️ {planError}</div>}
+              {guardando && (
+                <div style={styles.planStatus}>Guardando en Convex...</div>
+              )}
+              <SessionPlanForm
+                // Remontar al cambiar de plan: el formulario copia initialData a
+                // su estado local solo al montarse, así que sin esto seguiría
+                // mostrando el plan anterior.
+                key={planId ?? "nuevo"}
+                initialData={sessionPlan}
+                onSubmit={handleFormSubmit}
+              />
+            </>
           )}
 
-          {activeTab === "plan_pdf" && (
-            <SessionPlanPdf
-              planData={sessionPlan}
-              onEdit={() => setActiveTab("plan_form")}
-            />
-          )}
+          {activeTab === "plan_pdf" &&
+            (sessionPlan ? (
+              <SessionPlanPdf
+                planData={sessionPlan}
+                onEdit={() => setActiveTab("plan_form")}
+              />
+            ) : (
+              <div style={styles.emptyPlanBox}>
+                <p style={styles.emptyPlanTitle}>Todavía no hay un plan cargado</p>
+                <p style={styles.emptyPlanDesc}>
+                  Completá el formulario en "2. Plan de Sesión" para generar el
+                  documento.
+                </p>
+                <button onClick={handleNuevoPlan} style={styles.emptyPlanBtn}>
+                  Crear un plan
+                </button>
+              </div>
+            ))}
 
           {activeTab === "grouping" && <StudentGroupings />}
         </div>
       </main>
+    </div>
+  )
+}
+
+interface PlanResumen {
+  _id: Id<"session_plans">
+  titulo: string
+  curso: string
+  fecha: string
+  updatedAt: number
+}
+
+interface PlanesGuardadosProps {
+  planes: PlanResumen[] | undefined
+  planIdActivo: Id<"session_plans"> | null
+  onAbrir: (id: Id<"session_plans">) => void
+  onNuevo: () => void
+}
+
+/**
+ * Planes ya guardados del docente. Se listan siempre, también cuando está
+ * vacío, para que quede claro que los planes ahora se persisten.
+ */
+function PlanesGuardados({
+  planes,
+  planIdActivo,
+  onAbrir,
+  onNuevo,
+}: PlanesGuardadosProps) {
+  if (planes === undefined) {
+    return (
+      <div style={styles.plansBar}>
+        <span style={styles.plansLabel}>Cargando planes guardados...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div style={styles.plansBar}>
+      <div style={styles.plansHeader}>
+        <span style={styles.plansLabel}>
+          {planes.length === 0
+            ? "No tenés planes guardados todavía"
+            : `Tus planes guardados (${planes.length})`}
+        </span>
+        <button onClick={onNuevo} style={styles.newPlanBtn}>
+          + Nuevo plan
+        </button>
+      </div>
+
+      {planes.length > 0 && (
+        <div style={styles.plansList}>
+          {planes.map((plan) => {
+            const activo = plan._id === planIdActivo
+            return (
+              <button
+                key={plan._id}
+                onClick={() => onAbrir(plan._id)}
+                style={{
+                  ...styles.planChip,
+                  ...(activo ? styles.planChipActive : {}),
+                }}
+              >
+                <span style={styles.planChipTitle}>{plan.titulo}</span>
+                <span style={styles.planChipMeta}>
+                  {plan.curso} · {plan.fecha}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
@@ -146,6 +295,110 @@ const styles: Record<string, React.CSSProperties> = {
     backgroundColor: "#f7f9f7",
     display: "flex",
     flexDirection: "column",
+  },
+  plansBar: {
+    backgroundColor: "#ffffff",
+    borderRadius: "16px",
+    padding: "18px 20px",
+    border: "1px solid #eef2ef",
+    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.02)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "12px",
+  },
+  plansHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "12px",
+  },
+  plansLabel: {
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#64748b",
+  },
+  newPlanBtn: {
+    padding: "8px 16px",
+    backgroundColor: "#f0f7f2",
+    color: "#2e7d48",
+    border: "1px solid #c8e6d0",
+    borderRadius: "10px",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  plansList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  planChip: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    padding: "8px 14px",
+    backgroundColor: "#f8faf8",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  planChipActive: {
+    backgroundColor: "#eaf5ed",
+    border: "1px solid #2e7d48",
+  },
+  planChipTitle: {
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#1e293b",
+  },
+  planChipMeta: {
+    fontSize: "11px",
+    color: "#94a3b8",
+  },
+  planStatus: {
+    fontSize: "13px",
+    color: "#2e7d48",
+    backgroundColor: "#eaf5ed",
+    padding: "10px 14px",
+    borderRadius: "10px",
+  },
+  planError: {
+    backgroundColor: "#fef2f2",
+    border: "1px solid #fecaca",
+    color: "#991b1b",
+    fontSize: "13px",
+    padding: "10px 14px",
+    borderRadius: "10px",
+  },
+  emptyPlanBox: {
+    backgroundColor: "#ffffff",
+    borderRadius: "20px",
+    padding: "40px 28px",
+    border: "1px solid #eef2ef",
+    textAlign: "center" as const,
+  },
+  emptyPlanTitle: {
+    fontSize: "16px",
+    fontWeight: 700,
+    color: "#1e293b",
+    margin: "0 0 6px 0",
+  },
+  emptyPlanDesc: {
+    fontSize: "13px",
+    color: "#64748b",
+    margin: "0 0 18px 0",
+  },
+  emptyPlanBtn: {
+    padding: "12px 24px",
+    backgroundColor: "#2e7d48",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
   },
   navbar: {
     height: "72px",
