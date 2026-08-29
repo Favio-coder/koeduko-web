@@ -79,7 +79,17 @@ export const analyzeTranscription = action({
       );
     }
 
-    const anthropic = new Anthropic({ apiKey });
+    // Las keys ligadas a una identidad exigen declarar en qué workspace actúa
+    // la petición; las keys de workspace no lo necesitan. El id no es secreto,
+    // pero se lee del entorno para no atarlo al código.
+    const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+
+    const anthropic = new Anthropic({
+      apiKey,
+      ...(workspaceId
+        ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } }
+        : {}),
+    });
 
     const message = await anthropic.messages.create({
       model: "claude-opus-5",
