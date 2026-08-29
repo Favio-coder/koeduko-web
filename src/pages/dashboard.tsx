@@ -1,6 +1,8 @@
+import { useState } from "react"
 import { useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
 import type { User } from "../App"
+import DocenteModule from "./DocenteModule"
 
 interface DashboardProps {
   user: User
@@ -8,10 +10,16 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
+  const [showDocenteModule, setShowDocenteModule] = useState(false)
+
   const roles = useQuery(api.roles.listar)
   const usuarios = useQuery(api.usuario.listar)
   const cursos = useQuery(api.curso.listar)
   const instruccion = useQuery(api.instruccion.listar)
+
+  if (showDocenteModule) {
+    return <DocenteModule onBackToDashboard={() => setShowDocenteModule(false)} />
+  }
 
   return (
     <div style={styles.container}>
@@ -58,6 +66,22 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </section>
 
+        {/* Teacher Module Callout Card */}
+        <section style={styles.docenteCalloutCard}>
+          <div style={styles.calloutLeft}>
+            <div style={styles.calloutIcon}>🎙️</div>
+            <div>
+              <h3 style={styles.calloutTitle}>Módulo del Docente</h3>
+              <p style={styles.calloutDesc}>
+                Escucha el salón de clases, analiza la participación, genera el Plan de Sesión en PDF y agrupa estudiantes según su rendimiento.
+              </p>
+            </div>
+          </div>
+          <button onClick={() => setShowDocenteModule(true)} style={styles.calloutBtn}>
+            🚀 Abrir Módulo Docente →
+          </button>
+        </section>
+
         {/* Quick Stats Grid */}
         <section style={styles.statsGrid}>
           <div style={styles.statCard}>
@@ -90,7 +114,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </section>
 
-        {/* Content Section: Roles List */}
+        {/* Roles List */}
         <section style={styles.contentCard}>
           <div style={styles.cardHeader}>
             <div>
@@ -272,6 +296,53 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "50%",
     backgroundColor: "#2e7d48",
     display: "inline-block",
+  },
+  docenteCalloutCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: "20px",
+    padding: "24px 32px",
+    border: "2px solid #b8e2c4",
+    boxShadow: "0 8px 24px -6px rgba(46, 125, 72, 0.12)",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "20px",
+  },
+  calloutLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    maxWidth: "680px",
+  },
+  calloutIcon: {
+    fontSize: "36px",
+    padding: "12px",
+    backgroundColor: "#eaf5ed",
+    borderRadius: "16px",
+  },
+  calloutTitle: {
+    fontSize: "18px",
+    fontWeight: 800,
+    color: "#1e293b",
+    margin: "0 0 4px 0",
+  },
+  calloutDesc: {
+    fontSize: "13px",
+    color: "#475569",
+    margin: 0,
+    lineHeight: 1.5,
+  },
+  calloutBtn: {
+    padding: "12px 24px",
+    backgroundColor: "#2e7d48",
+    color: "#ffffff",
+    border: "none",
+    borderRadius: "12px",
+    fontSize: "14px",
+    fontWeight: 700,
+    boxShadow: "0 4px 14px rgba(46, 125, 72, 0.25)",
+    cursor: "pointer",
   },
   statsGrid: {
     display: "grid",
