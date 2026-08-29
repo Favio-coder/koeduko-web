@@ -24,6 +24,9 @@ interface SessionIds {
  */
 export default function VapiAssistant({ userEmail, userName }: VapiAssistantProps) {
   const [sessionIds, setSessionIds] = useState<SessionIds | null>(null)
+  // "Hay sesión que mostrar" y "la llamada sigue abierta" son cosas distintas:
+  // al cortar, los resultados tienen que seguir en pantalla.
+  const [enVivo, setEnVivo] = useState(false)
   const [sessionError, setSessionError] = useState("")
   const [starting, setStarting] = useState(false)
 
@@ -45,7 +48,7 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
    * Convex descarta lo que llegue repetido.
    */
   useEffect(() => {
-    if (!sessionIds) return
+    if (!sessionIds || !enVivo) return
 
     return onTranscript((line) => {
       const vapiCallId = callIdRef.current
@@ -62,7 +65,7 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
         console.error("No se pudo guardar la transcripción:", error)
       })
     })
-  }, [sessionIds, ingestTranscript])
+  }, [sessionIds, enVivo, ingestTranscript])
 
   const handleStart = async () => {
     setSessionError("")
@@ -80,6 +83,7 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
 
       callIdRef.current = placeholderCallId
       setSessionIds(ids)
+      setEnVivo(true)
 
       const vapiCallId = await startSession(ids.sessionId, userName)
 
@@ -102,6 +106,7 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
       stopSession()
       callIdRef.current = null
       setSessionIds(null)
+      setEnVivo(false)
     } finally {
       setStarting(false)
     }
@@ -110,7 +115,11 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
   const handleStop = async () => {
     stopSession()
     const activos = sessionIds
-    setSessionIds(null)
+
+    // Los IDs NO se limpian acá. Borrarlos desmontaba la vista y el docente
+    // se quedaba con la pantalla vacía justo cuando llegaban la transcripción
+    // y los reportes, que tardan unos segundos más que el corte de la llamada.
+    setEnVivo(false)
     callIdRef.current = null
 
     if (activos) {
@@ -125,7 +134,18 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
     }
   }
 
-  const disabled = starting || sessionIds !== null
+  /**
+   * Cierra los resultados y deja el panel listo para otra sesión.
+   *
+   * Es explícito y no automático: la transcripción y los reportes siguen
+   * guardados en Convex, pero el docente decide cuándo dejar de mirarlos.
+   */
+  const handleNuevaSesion = () => {
+    setSessionIds(null)
+    setSessionError("")
+  }
+
+  const disabled = starting || enVivo
 
   return (
     <div style={styles.card}>
@@ -140,7 +160,7 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
           </div>
         </div>
 
-        {sessionIds && (
+        {enVivo && (
           <div style={styles.liveIndicator}>
             <span style={styles.pulseDot} />
             <span>Sesión activa</span>
@@ -161,14 +181,28 @@ export default function VapiAssistant({ userEmail, userName }: VapiAssistantProp
           {starting ? "Iniciando..." : "🎙️ Iniciar Llamada"}
         </button>
 
-        {sessionIds && (
+        {enVivo && (
           <button onClick={handleStop} style={styles.stopBtn}>
             ⏹️ Detener
+          </button>
+        )}
+
+        {sessionIds && !enVivo && (
+          <button onClick={handleNuevaSesion} style={styles.secondaryBtn}>
+            ✨ Nueva sesión
           </button>
         )}
       </div>
 
       {sessionError && <div style={styles.errorBox}>⚠️ {sessionError}</div>}
+
+      {sessionIds && !enVivo && (
+        <div style={styles.finishedBox}>
+          <strong>Sesión finalizada.</strong> La transcripción ya está guardada.
+          Los reportes por estudiante tardan unos 25 segundos en aparecer:
+          primero terminan de analizarse las últimas respuestas.
+        </div>
+      )}
 
       {sessionIds && (
         <SessionLiveView
@@ -273,5 +307,24 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: "13px",
     padding: "10px 14px",
     borderRadius: "10px",
+  },
+  secondaryBtn: {
+    padding: "12px 24px",
+    backgroundColor: "#f0f7f2",
+    color: "#2e7d48",
+    border: "1px solid #c8e6d0",
+    borderRadius: "12px",
+    fontSize: "14px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+  finishedBox: {
+    backgroundColor: "#eaf5ed",
+    border: "1px solid #c8e6d0",
+    color: "#1e5631",
+    fontSize: "13px",
+    padding: "12px 16px",
+    borderRadius: "10px",
+    lineHeight: 1.5,
   },
 }
