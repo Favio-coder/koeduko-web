@@ -46,10 +46,21 @@ export const conversacionPorEstudiante = internalQuery({
     });
 
     const nombrePorUsuario = new Map<Id<"usuario">, string>();
+    // Los docentes se excluyen de los reportes: conducen la sesión, no son
+    // evaluados en ella. Sin esto se le genera un reporte al profesor.
+    const esDocente = new Set<Id<"usuario">>();
+
     for (const t of ordenadas) {
       if (!nombrePorUsuario.has(t.userId)) {
         const usuario = await ctx.db.get(t.userId);
         nombrePorUsuario.set(t.userId, usuario?.nombre ?? "Estudiante");
+
+        if (usuario) {
+          const rol = await ctx.db.get(usuario.rol_id);
+          if (rol?.nombre === "docente") {
+            esDocente.add(t.userId);
+          }
+        }
       }
     }
 
@@ -63,9 +74,13 @@ export const conversacionPorEstudiante = internalQuery({
       })
       .join("\n");
 
-    // Las intervenciones del asistente no se atribuyen a nadie: el reporte es
-    // sobre lo que dijeron los estudiantes.
-    const deEstudiantes = ordenadas.filter((t) => t.role !== "assistant");
+    // Las intervenciones del asistente no se atribuyen a nadie, y las del
+    // docente tampoco: el reporte es sobre lo que dijeron los estudiantes.
+    const deEstudiantes = ordenadas.filter(
+      (t) => t.role !== "assistant" && !esDocente.has(t.userId)
+    );
+
+    if (deEstudiantes.length === 0) return null;
 
     const porUsuario = new Map<
       Id<"usuario">,
@@ -115,6 +130,39 @@ export const conversacionPorEstudiante = internalQuery({
 });
 
 /**
+ * Borra los reportes de la sesión que no correspondan a ningún estudiante
+ * evaluado.
+ *
+ * Cubre a quien dejó de calificar entre dos corridas: por ejemplo el docente,
+ * que antes recibía reporte y ahora se excluye. Sin esto su reporte viejo
+ * sobrevive y sigue apareciendo en pantalla.
+ */
+export const limpiarReportesHuerfanos = internalMutation({
+  args: {
+    sessionId: v.id("study_sessions"),
+    userIdsValidos: v.array(v.id("usuario")),
+  },
+  handler: async (ctx, args) => {
+    const validos = new Set(args.userIdsValidos);
+
+    const reportes = await ctx.db
+      .query("session_reports")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .collect();
+
+    let borrados = 0;
+    for (const reporte of reportes) {
+      if (!validos.has(reporte.userId)) {
+        await ctx.db.delete(reporte._id);
+        borrados += 1;
+      }
+    }
+
+    return { borrados };
+  },
+});
+
+/**
  * Guarda el reporte escrito por Claude, reemplazando el anterior si lo hay.
  */
 export const guardarReporteIA = internalMutation({
@@ -129,13 +177,19 @@ export const guardarReporteIA = internalMutation({
     recommendations: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    // Un reporte por estudiante y sesión: regenerar reemplaza en vez de
-    // acumular versiones que después se muestran duplicadas.
-    const existente = await ctx.db
+    // Un reporte por estudiante y sesión. Se borran TODOS los previos, no solo
+    // el primero: el reporte por plantilla y cualquier corrida anterior dejan
+    // varias filas para el mismo par, y quedarse con una las mostraría
+    // duplicadas en pantalla.
+    const previos = await ctx.db
       .query("session_reports")
       .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
       .filter((q) => q.eq(q.field("userId"), args.userId))
-      .first();
+      .collect();
+
+    for (const previo of previos) {
+      await ctx.db.delete(previo._id);
+    }
 
     const datos = {
       sessionId: args.sessionId,
@@ -148,11 +202,6 @@ export const guardarReporteIA = internalMutation({
       recommendations: args.recommendations,
       generatedAt: Date.now(),
     };
-
-    if (existente) {
-      await ctx.db.patch(existente._id, datos);
-      return existente._id;
-    }
 
     return await ctx.db.insert("session_reports", datos);
   },

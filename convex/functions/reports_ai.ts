@@ -137,6 +137,16 @@ export const generateAIReports = action({
       generados += 1;
     }
 
+    // Se limpia al final: quien dejó de calificar para un reporte (el docente,
+    // o alguien que ya no participa) arrastraría el suyo de corridas previas.
+    await ctx.runMutation(
+      internal.functions.reports_data.limpiarReportesHuerfanos,
+      {
+        sessionId: datos.sessionId,
+        userIdsValidos: datos.estudiantes.map((e) => e.id),
+      }
+    );
+
     return { generados };
   },
 });
