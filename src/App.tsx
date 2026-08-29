@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { ConvexProvider, ConvexReactClient } from "convex/react"
 import Dashboard from "./pages/dashboard"
 import Login from "./pages/Login"
+import { ErrorBoundary } from "./components/ErrorBoundary"
 
 interface User {
   _id: string
@@ -9,8 +9,6 @@ interface User {
   email: string
   rol_id: string
 }
-
-const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL)
 
 export default function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -31,14 +29,20 @@ export default function App() {
     window.location.href = "/"
   }
 
+  // main.tsx ya monta el ConvexProvider, así que acá solo hace falta el
+  // boundary: sin él, un error de render deja la pantalla en blanco.
   if (!user) {
-    return <Login />
+    return (
+      <ErrorBoundary>
+        <Login />
+      </ErrorBoundary>
+    )
   }
 
   return (
-    <ConvexProvider client={convex}>
+    <ErrorBoundary>
       <Dashboard user={user} onLogout={handleLogout} />
-    </ConvexProvider>
+    </ErrorBoundary>
   )
 }
 
