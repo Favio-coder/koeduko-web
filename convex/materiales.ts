@@ -29,3 +29,23 @@ export const listar = query({
     return await ctx.db.query("materiales").collect();
   },
 });
+
+/**
+ * Materiales de un módulo, usando el índice en vez de traer la tabla entera.
+ */
+export const listarPorModulo = query({
+  args: { c_mod: v.id("modulos") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("materiales")
+      .withIndex("por_c_mod", (q) => q.eq("c_mod", args.c_mod))
+      .collect();
+  },
+});
+
+export const eliminar = mutation({
+  args: { id: v.id("materiales") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+  },
+});

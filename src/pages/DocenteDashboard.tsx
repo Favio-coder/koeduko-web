@@ -1,9 +1,8 @@
 import { useState } from "react"
 import type { User } from "../App"
 import DocenteModule from "./DocenteModule"
+import VapiAssistant from "../components/teacher/VapiAssistant"
 import UserProfile from "../components/common/UserProfile"
-import { SessionLiveView } from "../components/SessionLiveView"
-import { startSession, stopSession } from "../lib/vapi"
 import DocenteStats from "../components/teacher/DocenteStats"
 import DocenteRecordings from "../components/teacher/DocenteRecordings"
 import DocenteCourses from "../components/teacher/DocenteCourses"
@@ -18,28 +17,6 @@ type DocenteTab = "inicio" | "cursos" | "grabaciones" | "sesiones" | "estadistic
 
 export default function DocenteDashboard({ user, onLogout, onUpdateUser }: DocenteDashboardProps) {
   const [activeTab, setActiveTab] = useState<DocenteTab>("inicio")
-  const [isVapiActive, setIsVapiActive] = useState(false)
-  const [sessionIds, setSessionIds] = useState({ session: "", vapi: "" })
-
-  const handleStartLiveSession = async () => {
-    try {
-      const mockSessionId = `session-${Date.now()}`
-      const mockVapiId = `vapi-${Date.now()}`
-
-      await startSession(mockSessionId, user.nombre)
-      setSessionIds({ session: mockSessionId, vapi: mockVapiId })
-      setIsVapiActive(true)
-    } catch (err) {
-      console.warn("Vapi connection fallback mode:", err)
-      setIsVapiActive(true)
-    }
-  }
-
-  const handleStopLiveSession = () => {
-    stopSession()
-    setIsVapiActive(false)
-  }
-
   return (
     <div style={styles.container}>
       {/* Top Navbar */}
@@ -173,40 +150,10 @@ export default function DocenteDashboard({ user, onLogout, onUpdateUser }: Docen
                 </div>
               </section>
 
-              {/* Vapi Live Session Controller (Exclusivo Docente) */}
-              <section style={styles.vapiControlCard}>
-                <div style={styles.vapiControlLeft}>
-                  <div style={styles.vapiIcon}>🎙️</div>
-                  <div>
-                    <h3 style={styles.vapiTitle}>Grabación y Asistente IA de Aula en Vivo</h3>
-                    <p style={styles.vapiDesc}>
-                      {isVapiActive
-                        ? "Escuchando interacciones del aula en vivo con Vapi..."
-                        : "Inicia la sesión con Vapi para grabar y analizar la clase en tiempo real."}
-                    </p>
-                  </div>
-                </div>
-
-                <div style={styles.vapiActions}>
-                  {!isVapiActive ? (
-                    <button onClick={handleStartLiveSession} style={styles.startVapiBtn}>
-                      🎙️ Iniciar Grabación de Sesión
-                    </button>
-                  ) : (
-                    <button onClick={handleStopLiveSession} style={styles.stopVapiBtn}>
-                      ⏹️ Detener Grabación
-                    </button>
-                  )}
-                </div>
-              </section>
-
-              {/* Render Vapi Live View if active */}
-              {isVapiActive && (
-                <SessionLiveView
-                  sessionId={sessionIds.session}
-                  vapiSessionId={sessionIds.vapi}
-                />
-              )}
+              {/* Asistente de voz: usa el componente que crea la sesión real en
+                  Convex. La versión anterior inventaba los ids de sesión, y las
+                  queries de la vista en vivo los rechazan por validator. */}
+              <VapiAssistant userEmail={user.email} userName={user.nombre} />
 
               {/* Summary Stats Grid */}
               <section style={styles.statsGrid}>
@@ -260,7 +207,7 @@ export default function DocenteDashboard({ user, onLogout, onUpdateUser }: Docen
           {activeTab === "grabaciones" && <DocenteRecordings />}
 
           {/* Sesiones y Aula -> Render full DocenteModule */}
-          {activeTab === "sesiones" && <DocenteModule />}
+          {activeTab === "sesiones" && <DocenteModule user={user} />}
 
           {activeTab === "estadisticas" && <DocenteStats />}
 
