@@ -6,6 +6,7 @@ import AudioRecorder from "../components/teacher/AudioRecorder"
 import SessionPlanForm, { type SessionPlanData } from "../components/teacher/SessionPlanForm"
 import SessionPlanPdf from "../components/teacher/SessionPlanPdf"
 import StudentGroupings from "../components/teacher/StudentGroupings"
+import PeerSession from "../components/teacher/PeerSession"
 import VapiAssistant from "../components/teacher/VapiAssistant"
 import SugerenciasPlan from "../components/teacher/SugerenciasPlan"
 import type { User } from "../App"
@@ -209,7 +210,12 @@ export default function DocenteModule({ user, onBackToDashboard }: DocenteModule
               </div>
             ))}
 
-          {activeTab === "grouping" && <StudentGroupings />}
+          {activeTab === "grouping" && (
+            <>
+              <PeerSession />
+              <StudentGroupings />
+            </>
+          )}
         </div>
       </main>
     </div>

@@ -197,3 +197,87 @@ export const markCallEnded = mutation({
     });
   },
 });
+
+/**
+ * Sesión de aprendizaje entre dos estudiantes.
+ *
+ * A diferencia de createLiveSession, que arma una conexión de relleno para que
+ * el docente pruebe el asistente, acá la peer_connection es real: vincula al
+ * estudiante que explica con el que necesita reforzar, y esa relación queda
+ * registrada para futuras sesiones entre ellos.
+ */
+export const createPeerSession = mutation({
+  args: {
+    mentorId: v.id("usuario"),
+    aprendizId: v.id("usuario"),
+    tema: v.optional(v.string()),
+    vapiCallId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    if (args.mentorId === args.aprendizId) {
+      throw new Error("Una sesión entre pares necesita dos estudiantes distintos");
+    }
+
+    const mentor = await ctx.db.get(args.mentorId);
+    const aprendiz = await ctx.db.get(args.aprendizId);
+
+    if (!mentor || !aprendiz) {
+      throw new Error("Alguno de los estudiantes no existe");
+    }
+
+    // La conexión se reutiliza en cualquier sentido: si Carlos ya ayudó a
+    // Miguel, la próxima vez que trabajen juntos es la misma relación aunque
+    // se inviertan los roles.
+    const desdeMentor = await ctx.db
+      .query("peer_connections")
+      .withIndex("by_from", (q) => q.eq("userId_from", args.mentorId))
+      .collect();
+
+    const desdeAprendiz = await ctx.db
+      .query("peer_connections")
+      .withIndex("by_from", (q) => q.eq("userId_from", args.aprendizId))
+      .collect();
+
+    let connectionId =
+      desdeMentor.find((c) => c.userId_to === args.aprendizId)?._id ??
+      desdeAprendiz.find((c) => c.userId_to === args.mentorId)?._id;
+
+    if (!connectionId) {
+      connectionId = await ctx.db.insert("peer_connections", {
+        userId_from: args.mentorId,
+        userId_to: args.aprendizId,
+        status: "accepted",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+
+    const titulo = args.tema
+      ? `${mentor.nombre} y ${aprendiz.nombre}: ${args.tema}`
+      : `${mentor.nombre} y ${aprendiz.nombre}`;
+
+    const sessionId = await ctx.db.insert("study_sessions", {
+      connectionId,
+      title: titulo,
+      agenda: args.tema,
+      status: "ongoing",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    const vapiSessionId = await ctx.db.insert("vapi_sessions", {
+      sessionId,
+      vapiCallId: args.vapiCallId,
+      status: "active",
+      startedAt: Date.now(),
+      createdAt: Date.now(),
+    });
+
+    return {
+      sessionId,
+      vapiSessionId,
+      mentor: { id: mentor._id, nombre: mentor.nombre },
+      aprendiz: { id: aprendiz._id, nombre: aprendiz.nombre },
+    };
+  },
+});

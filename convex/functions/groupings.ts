@@ -63,3 +63,85 @@ export const listStudentPerformance = query({
     );
   },
 });
+
+/**
+ * Parejas sugeridas para aprendizaje entre pares.
+ *
+ * Empareja al de mayor desempeño con el de menor, al segundo con el anteúltimo
+ * y así: el que más domina acompaña al que más lo necesita, en vez de juntar a
+ * los que ya entienden entre sí.
+ *
+ * El tema de cada pareja sale de lo que el aprendiz tiene pendiente y el mentor
+ * ya domina — si no hay coincidencia, la pareja igual sirve pero sin tema
+ * sugerido, y eso se dice en vez de inventar uno.
+ */
+export const sugerirParejas = query({
+  args: {},
+  handler: async (ctx) => {
+    const rolEstudiante = await ctx.db
+      .query("roles")
+      .withIndex("por_nombre", (q) => q.eq("nombre", "estudiante"))
+      .first();
+
+    if (!rolEstudiante) return [];
+
+    const estudiantes = await ctx.db
+      .query("usuario")
+      .withIndex("por_rol_id", (q) => q.eq("rol_id", rolEstudiante._id))
+      .collect();
+
+    const conDesempeno = [];
+    for (const estudiante of estudiantes) {
+      const reportes = await ctx.db
+        .query("session_reports")
+        .withIndex("by_user", (q) => q.eq("userId", estudiante._id))
+        .collect();
+
+      // Sin reportes no se puede emparejar por desempeño: no se sabe quién
+      // acompañaría a quién.
+      if (reportes.length === 0) continue;
+
+      conDesempeno.push({
+        id: estudiante._id,
+        nombre: estudiante.nombre,
+        avgQuality:
+          Math.round(
+            (reportes.reduce((s, r) => s + r.avgQuality, 0) / reportes.length) * 10
+          ) / 10,
+        domina: [...new Set(reportes.flatMap((r) => r.conceptsMastered))],
+        pendientes: [...new Set(reportes.flatMap((r) => r.conceptsMissed))],
+      });
+    }
+
+    const ordenados = conDesempeno.sort((a, b) => b.avgQuality - a.avgQuality);
+
+    const parejas = [];
+    let inicio = 0;
+    let fin = ordenados.length - 1;
+
+    while (inicio < fin) {
+      const mentor = ordenados[inicio];
+      const aprendiz = ordenados[fin];
+
+      const temaComun = aprendiz.pendientes.find((p) =>
+        mentor.domina.some((d) => d.toLowerCase() === p.toLowerCase())
+      );
+
+      parejas.push({
+        mentor: { id: mentor.id, nombre: mentor.nombre, avgQuality: mentor.avgQuality },
+        aprendiz: {
+          id: aprendiz.id,
+          nombre: aprendiz.nombre,
+          avgQuality: aprendiz.avgQuality,
+        },
+        tema: temaComun ?? aprendiz.pendientes[0] ?? null,
+        temaLoDominaElMentor: Boolean(temaComun),
+      });
+
+      inicio += 1;
+      fin -= 1;
+    }
+
+    return parejas;
+  },
+});
