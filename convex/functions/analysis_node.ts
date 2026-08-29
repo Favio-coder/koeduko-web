@@ -92,7 +92,11 @@ export const analyzeTranscription = action({
     });
 
     const message = await anthropic.messages.create({
-      model: "claude-opus-5",
+      // Clasificar una respuesta corta y extraer conceptos es una tarea
+      // simple: Haiku la resuelve bien y cuesta una fracción de un modelo
+      // mayor. Si el análisis crece a resúmenes pedagógicos largos, conviene
+      // reevaluar con claude-sonnet-5 o claude-opus-5.
+      model: "claude-haiku-4-5",
       max_tokens: 1024,
       system:
         "Analizás respuestas de estudiantes en sesiones de aprendizaje. " +
