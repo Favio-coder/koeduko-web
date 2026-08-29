@@ -1,5 +1,6 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
+import type { Id } from "../_generated/dataModel";
 
 export const subscribeToSession = query({
   args: {
@@ -36,9 +37,11 @@ export const subscribeToSessionReports = query({
     sessionId: v.union(v.id("study_sessions"), v.string()),
   },
   handler: async (ctx, args) => {
-return await ctx.db
+    return await ctx.db
       .query("session_reports")
-      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .withIndex("by_session", (q) =>
+        q.eq("sessionId", args.sessionId as Id<"study_sessions">),
+      )
       .collect();
   },
 });
