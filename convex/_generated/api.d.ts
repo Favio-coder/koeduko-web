@@ -9,12 +9,14 @@
  */
 
 import type * as curso from "../curso.js";
+import type * as http from "../http.js";
 import type * as instruccion from "../instruccion.js";
 import type * as materiales from "../materiales.js";
 import type * as matricula from "../matricula.js";
 import type * as modulos from "../modulos.js";
 import type * as roles from "../roles.js";
 import type * as usuario from "../usuario.js";
+import type * as vapi from "../vapi.js";
 
 import type {
   ApiFromModules,
@@ -24,12 +26,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   curso: typeof curso;
+  http: typeof http;
   instruccion: typeof instruccion;
   materiales: typeof materiales;
   matricula: typeof matricula;
   modulos: typeof modulos;
   roles: typeof roles;
   usuario: typeof usuario;
+  vapi: typeof vapi;
 }>;
 
 /**
