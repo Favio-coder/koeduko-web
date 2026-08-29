@@ -36,13 +36,9 @@ export const subscribeToSessionReports = query({
     sessionId: v.union(v.id("study_sessions"), v.string()),
   },
   handler: async (ctx, args) => {
-    try {
-      return await ctx.db
-        .query("session_reports")
-        .filter((q) => q.eq(q.field("sessionId"), args.sessionId as any))
-        .collect();
-    } catch {
-      return [];
-    }
+return await ctx.db
+      .query("session_reports")
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
+      .collect();
   },
 });

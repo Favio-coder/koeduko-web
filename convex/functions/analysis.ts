@@ -1,75 +1,77 @@
-import { mutation } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 
-export const analyzeTranscription = mutation({
+/**
+ * Query y mutation que dan soporte al análisis con Claude.
+ *
+ * La action que llama a la API vive en analysis_node.ts, porque el SDK de
+ * Anthropic necesita el runtime de Node y Convex no admite queries ni
+ * mutations en archivos con "use node".
+ */
+
+/**
+ * Última transcripción de la sesión de Vapi identificada por su callId.
+ */
+export const latestTranscriptionByCall = internalQuery({
   args: {
-    callId: v.string(),
-    text: v.string(),
+    vapiCallId: v.string(),
   },
   handler: async (ctx, args) => {
-    // Llamar a Claude API para analizar
-    const claudeResponse = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // @ts-ignore
-        "x-api-key": process.env.CLAUDE_API_KEY || "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 500,
-        messages: [
-          {
-            role: "user",
-            content: `Analiza esta respuesta de estudiante. Retorna JSON con: {"quality": 1-10, "understanding": true/false, "concepts": ["concept1", "concept2"], "sentiment": "positive/neutral/negative"}\n\nRespuesta: "${args.text}"`,
-          },
-        ],
-      }),
-    });
-
-    const claudeData = await claudeResponse.json();
-    const analysisText =
-      claudeData.content && claudeData.content[0].type === "text" ? claudeData.content[0].text : "{}";
-
-    let analysis;
-    try {
-      analysis = JSON.parse(analysisText);
-    } catch {
-      analysis = {
-        quality: 5,
-        understanding: false,
-        concepts: [],
-        sentiment: "neutral",
-      };
-    }
-
-    // Encontrar transcription y guardar análisis
-    // Buscamos la sesión de Vapi primero
     const vapiSession = await ctx.db
       .query("vapi_sessions")
-      .filter((q) => q.eq(q.field("vapiCallId"), args.callId))
+      .withIndex("by_call", (q) => q.eq("vapiCallId", args.vapiCallId))
       .first();
 
-    const transcription = await ctx.db
+    if (!vapiSession) return null;
+
+    return await ctx.db
       .query("transcriptions")
-      .filter((q) => q.eq(q.field("vapiSessionId"), vapiSession?._id || "placeholder-id"))
+      .withIndex("by_session", (q) => q.eq("vapiSessionId", vapiSession._id))
       .order("desc")
       .first();
+  },
+});
 
-    if (transcription) {
-      await ctx.db.insert("ai_analysis", {
-        transcriptionId: transcription._id,
-        userId: transcription.userId,
-        quality: analysis.quality || 5,
-        understanding: analysis.understanding || false,
-        concepts: analysis.concepts || [],
-        sentiment: analysis.sentiment || "neutral",
-        response_text: args.text,
-        createdAt: Date.now(),
-      });
-    }
+/**
+ * Guarda el análisis producido por Claude.
+ */
+export const saveAnalysis = internalMutation({
+  args: {
+    transcriptionId: v.id("transcriptions"),
+    userId: v.id("usuario"),
+    quality: v.number(),
+    understanding: v.boolean(),
+    concepts: v.array(v.string()),
+    sentiment: v.string(),
+    responseText: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("ai_analysis", {
+      transcriptionId: args.transcriptionId,
+      userId: args.userId,
+      quality: args.quality,
+      understanding: args.understanding,
+      concepts: args.concepts,
+      sentiment: args.sentiment,
+      response_text: args.responseText,
+      createdAt: Date.now(),
+    });
+  },
+});
 
-    return analysis;
+/**
+ * Transcripción concreta que hay que analizar.
+ *
+ * Reemplaza a latestTranscriptionByCall en el camino en vivo: cuando dos
+ * frases entran con pocos milisegundos de diferencia, "la última de la
+ * llamada" no es necesariamente la que disparó el análisis, y el resultado se
+ * termina colgando de la frase equivocada.
+ */
+export const transcriptionById = internalQuery({
+  args: {
+    transcriptionId: v.id("transcriptions"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.transcriptionId);
   },
 });

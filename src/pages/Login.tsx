@@ -1,61 +1,62 @@
 import { useState } from "react"
-import { useConvex } from "convex/react"
-import { api } from "@convex/_generated/api"
+import { useAuthActions } from "@convex-dev/auth/react"
 
+type Modo = "signIn" | "signUp"
+
+/**
+ * Ingreso con email y contraseña.
+ *
+ * Antes alcanzaba con escribir un email existente para entrar como esa
+ * persona. Ahora la credencial la verifica el servidor.
+ *
+ * El registro no crea el perfil: eso se hace desde Gestión Académica. Alguien
+ * que se registre con un email no dado de alta entra sin rol y no puede operar,
+ * lo que evita que cualquiera se autoasigne permisos.
+ */
 export default function Login() {
-  const [loadingRole, setLoadingRole] = useState<"docente" | "estudiante" | null>(null)
+  const { signIn } = useAuthActions()
+
+  const [modo, setModo] = useState<Modo>("signIn")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const convex = useConvex()
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-  const handleRoleLogin = async (role: "docente" | "estudiante") => {
-    setLoadingRole(role)
+    if (!email.trim() || !password) {
+      setError("Completá el correo y la contraseña.")
+      return
+    }
+
+    // El proveedor exige 8 caracteres. Avisarlo acá evita un error del
+    // servidor que llega sin explicar qué le faltó a la contraseña.
+    if (modo === "signUp" && password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.")
+      return
+    }
+
+    setLoading(true)
     setError("")
-
-    const targetEmail = role === "docente" ? "ana@koeduko.com" : "carlos@koeduko.com"
-
     try {
-      // Intentar obtener usuario real de Convex por email
-      const user = await convex.query(api.auth.login, { email: targetEmail })
-      if (user) {
-        const enrichedUser = {
-          ...user,
-          rol: role,
-          carrera: user.carrera || (role === "docente" ? "Educación y Computación" : "Ingeniería de Software"),
-          institucion: (user as any).institucion || "Universidad Nacional de Ingeniería",
-          bio: (user as any).bio || (role === "docente"
-            ? "Profesor especialista en Inteligencia Artificial y metodología Peer-to-Peer."
-            : "Estudiante de ingeniería enfocado en desarrollo web y aprendizaje colaborativo."),
-        }
-        localStorage.setItem("koeduko_user", JSON.stringify(enrichedUser))
-        window.location.href = "/"
-        return
-      }
+      await signIn("password", { email: email.trim(), password, flow: modo })
     } catch (err) {
-      console.warn("Convex login query failed, utilizing demo user profile:", err)
+      console.error("Error de autenticación:", err)
+      // El servidor no distingue "no existe" de "contraseña incorrecta", y está
+      // bien: decir cuál de las dos falló revela qué correos están registrados.
+      setError(
+        modo === "signIn"
+          ? "Correo o contraseña incorrectos."
+          : "No se pudo crear la cuenta. Puede que ese correo ya esté registrado."
+      )
+    } finally {
+      setLoading(false)
     }
-
-    // Fallback a perfil demo estándar
-    const mockUser = {
-      _id: role === "docente" ? "user-docente-demo" : "user-estudiante-demo",
-      nombre: role === "docente" ? "Profesor Ana" : "Estudiante Carlos",
-      email: targetEmail,
-      carrera: role === "docente" ? "Educación & Algoritmos" : "Ingeniería de Software",
-      rol: role,
-      institucion: "Universidad Nacional de Ingeniería",
-      bio: role === "docente"
-        ? "Docente titular. Apasionado por la didáctica de la programación y la gestión de sesiones colaborativas."
-        : "Estudiante proactivo. Participante activo en redes de aprendizaje entre pares (Peer Learning).",
-      avatar: role === "docente" ? "👨‍🏫" : "👨‍🎓",
-    }
-
-    localStorage.setItem("koeduko_user", JSON.stringify(mockUser))
-    window.location.href = "/"
   }
 
   return (
     <div style={styles.page}>
-      {/* Background subtle ambient shapes */}
       <div style={styles.ambientGlow} />
 
       <div style={styles.card}>
@@ -70,60 +71,86 @@ export default function Login() {
           <span style={styles.tagline}>Aprende sin límites • Peer to Peer</span>
         </div>
 
-        <p style={styles.subtitle}>¿Cómo quieres ingresar hoy?</p>
+        <p style={styles.subtitle}>
+          {modo === "signIn"
+            ? "Ingresá con tu correo y contraseña"
+            : "Creá tu contraseña para acceder"}
+        </p>
 
-        {error && (
-          <div style={styles.errorBox}>
-            <span>⚠️ {error}</span>
+        <form onSubmit={handleSubmit}>
+          <div style={styles.formGroup}>
+            <label htmlFor="login-email" style={styles.label}>
+              Correo electrónico
+            </label>
+            <input
+              id="login-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ejemplo@koeduko.com"
+              style={styles.input}
+              autoComplete="email"
+            />
           </div>
-        )}
 
-        {/* Demo Role Selection Cards */}
-        <div style={styles.roleGrid}>
-          {/* Docente Card */}
+          <div style={styles.formGroup}>
+            <label htmlFor="login-password" style={styles.label}>
+              Contraseña
+            </label>
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={modo === "signUp" ? "Mínimo 8 caracteres" : "••••••••"}
+              style={styles.input}
+              autoComplete={modo === "signIn" ? "current-password" : "new-password"}
+            />
+          </div>
+
+          {error && (
+            <div style={styles.errorBox}>
+              <span>⚠️ {error}</span>
+            </div>
+          )}
+
           <button
-            type="button"
-            onClick={() => handleRoleLogin("docente")}
-            disabled={loadingRole !== null}
+            type="submit"
+            disabled={loading}
             style={{
-              ...styles.roleCard,
-              borderColor: loadingRole === "docente" ? "#2e7d48" : "#e2e8f0",
+              ...styles.submitBtn,
+              opacity: loading ? 0.75 : 1,
+              cursor: loading ? "not-allowed" : "pointer",
             }}
           >
-            <div style={styles.roleIconBadge}>👨‍🏫</div>
-            <div style={styles.roleTextContainer}>
-              <span style={styles.roleCardTitle}>Ingresar como Docente</span>
-              <span style={styles.roleCardSub}>
-                Gestiona tus cursos, graba sesiones y agrupa estudiantes
+            {loading ? (
+              <span style={styles.btnContent}>
+                <span style={styles.spinner} />
+                {modo === "signIn" ? "Entrando..." : "Creando cuenta..."}
               </span>
-            </div>
-            <div style={styles.roleArrow}>
-              {loadingRole === "docente" ? <span style={styles.spinner} /> : "→"}
-            </div>
+            ) : modo === "signIn" ? (
+              "Iniciar Sesión"
+            ) : (
+              "Crear cuenta"
+            )}
           </button>
+        </form>
 
-          {/* Estudiante Card */}
+        <div style={styles.switchSection}>
+          <p style={styles.switchText}>
+            {modo === "signIn"
+              ? "¿Primera vez? Si ya te registraron en KoEduko, creá tu contraseña con el mismo correo."
+              : "¿Ya tenés contraseña?"}
+          </p>
           <button
             type="button"
-            onClick={() => handleRoleLogin("estudiante")}
-            disabled={loadingRole !== null}
-            style={{
-              ...styles.roleCard,
-              borderColor: loadingRole === "estudiante" ? "#0284c7" : "#e2e8f0",
+            onClick={() => {
+              setModo((m) => (m === "signIn" ? "signUp" : "signIn"))
+              setError("")
             }}
+            style={styles.switchBtn}
           >
-            <div style={{ ...styles.roleIconBadge, backgroundColor: "#e0f2fe" }}>👨‍🎓</div>
-            <div style={styles.roleTextContainer}>
-              <span style={{ ...styles.roleCardTitle, color: "#0369a1" }}>
-                Ingresar como Estudiante
-              </span>
-              <span style={styles.roleCardSub}>
-                Revisa grabaciones, participa en sesiones Peer y mira tus avances
-              </span>
-            </div>
-            <div style={{ ...styles.roleArrow, color: "#0284c7" }}>
-              {loadingRole === "estudiante" ? <span style={styles.spinnerBlue} /> : "→"}
-            </div>
+            {modo === "signIn" ? "Crear mi contraseña" : "Volver a iniciar sesión"}
           </button>
         </div>
       </div>
@@ -288,7 +315,7 @@ const styles: Record<string, React.CSSProperties> = {
     animation: "spin 0.8s linear infinite",
     display: "inline-block",
   },
-  spinnerBlue: {
+spinnerBlue: {
     width: "16px",
     height: "16px",
     border: "2px solid #0284c7",
@@ -296,6 +323,68 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "50%",
     animation: "spin 0.8s linear infinite",
     display: "inline-block",
+  },
+  switchSection: {
+    marginTop: "24px",
+    paddingTop: "20px",
+    borderTop: "1px solid #f1f5f9",
+    width: "100%",
+    textAlign: "center" as const,
+  },
+  switchText: {
+    fontSize: "12px",
+    color: "#64748b",
+    margin: "0 0 10px 0",
+    lineHeight: 1.5,
+  },
+  switchBtn: {
+    padding: "10px 18px",
+    backgroundColor: "#f0f7f2",
+    color: "#2e7d48",
+    border: "1px solid #c8e6d0",
+    borderRadius: "10px",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+    width: "100%",
+  },
+  demoSection: {
+    marginTop: "28px",
+    paddingTop: "20px",
+    borderTop: "1px solid #f1f5f9",
+    width: "100%",
+  },
+  demoTitle: {
+    fontSize: "12px",
+    fontWeight: 600,
+    color: "#64748b",
+    marginBottom: "10px",
+    textAlign: "center" as const,
+  },
+  demoList: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: "8px",
+  },
+  demoChip: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "8px 12px",
+    backgroundColor: "#f8faf8",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+    textAlign: "left" as const,
+    width: "100%",
+  },
+  demoName: {
+    fontSize: "13px",
+    fontWeight: 600,
+    color: "#1e293b",
+  },
+  demoEmail: {
+    fontSize: "12px",
+    color: "#2e7d48",
   },
   pageFooter: {
     marginTop: "24px",
