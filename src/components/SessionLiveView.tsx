@@ -1,9 +1,14 @@
 import React from "react";
-import { useSessionLive, useSessionReports } from "../hooks/useSessionLive";
+import {
+  useSessionLive,
+  useSessionReports,
+  useSessionTranscript,
+} from "../hooks/useSessionLive";
+import type { Id } from "../../convex/_generated/dataModel";
 
 interface SessionLiveViewProps {
-  vapiSessionId: string;
-  sessionId: string;
+  vapiSessionId: Id<"vapi_sessions"> | null;
+  sessionId: Id<"study_sessions"> | null;
 }
 
 export const SessionLiveView: React.FC<SessionLiveViewProps> = ({
@@ -11,11 +16,38 @@ export const SessionLiveView: React.FC<SessionLiveViewProps> = ({
   sessionId,
 }) => {
   const { liveData } = useSessionLive(vapiSessionId);
+  const transcript = useSessionTranscript(vapiSessionId);
   const reports = useSessionReports(sessionId);
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Sesión en Vivo</h2>
+
+      {/* TRANSCRIPCIÓN */}
+      <div className="mb-6">
+        <h3 className="text-xl font-bold mb-3">Transcripción</h3>
+        {transcript.length > 0 ? (
+          <div className="max-h-80 overflow-y-auto space-y-2 pr-2">
+            {transcript.map((line) => (
+              <div
+                key={line._id}
+                className={
+                  line.role === "assistant"
+                    ? "p-3 rounded bg-gray-100 border-l-4 border-gray-400"
+                    : "p-3 rounded bg-blue-50 border-l-4 border-blue-500"
+                }
+              >
+                <p className="text-xs font-semibold text-gray-500 uppercase">
+                  {line.role === "assistant" ? "Asistente" : "Estudiante"}
+                </p>
+                <p className="text-sm text-gray-800 mt-1">{line.rawText}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500">Escuchando...</p>
+        )}
+      </div>
 
       {/* DATOS EN TIEMPO REAL */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

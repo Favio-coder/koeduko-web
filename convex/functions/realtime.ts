@@ -34,7 +34,7 @@ export const subscribeToSessionReports = query({
   handler: async (ctx, args) => {
     return await ctx.db
       .query("session_reports")
-      .filter((q) => q.eq(q.field("sessionId"), args.sessionId))
+      .withIndex("by_session", (q) => q.eq("sessionId", args.sessionId))
       .collect();
   },
 });
