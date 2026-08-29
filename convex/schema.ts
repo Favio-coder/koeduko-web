@@ -120,4 +120,63 @@ export default defineSchema({
   })
     .index("por_c_usuario", ["c_usuario"])
     .index("por_c_curso", ["c_curso"]),
+
+  // ═════════════════════════════════════════════
+  // TABLAS EN INGLÉS — Tracking, P2P, Evaluación
+  // ═════════════════════════════════════════════
+
+  // Progreso de aprendizaje de un usuario en un curso
+  learning_progress: defineTable({
+    userId: v.id("usuario"),
+    courseId: v.id("curso"),
+    progressPercent: v.number(),
+    completada: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["userId"])
+    .index("by_course", ["courseId"]),
+
+  // Perfil P2P del usuario (bio, habilidades, disponibilidad)
+  peer_profile: defineTable({
+    userId: v.id("usuario"),
+    bio: v.optional(v.string()),
+    skills: v.optional(v.array(v.string())),
+    availability: v.optional(v.string()),
+    learning_preferences: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  // Conexiones entre pares (solicitud de mentoría)
+  peer_connections: defineTable({
+    userId_from: v.id("usuario"),
+    userId_to: v.id("usuario"),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("rejected")),
+    mentorship_url: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_from", ["userId_from"])
+    .index("by_to", ["userId_to"]),
+
+  // Sesiones de estudio entre pares conectados
+  study_sessions: defineTable({
+    connectionId: v.id("peer_connections"),
+    title: v.optional(v.string()),
+    agenda: v.optional(v.string()),
+    status: v.union(v.literal("scheduled"), v.literal("ongoing"), v.literal("completed")),
+    mentoring_url: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_connection", ["connectionId"]),
+
+  // Criterios de evaluación por curso
+  course_evaluation_criteria: defineTable({
+    courseId: v.id("curso"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    pass_mark: v.optional(v.number()),
+    createdAt: v.number(),
+  }).index("by_course", ["courseId"]),
 });

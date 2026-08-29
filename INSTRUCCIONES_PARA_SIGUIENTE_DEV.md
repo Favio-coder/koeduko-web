@@ -8,9 +8,11 @@
 
 El schema completo en español: **`convex/schema.ts`**
 
-6 tablas definidas con:
+7 tablas definidas con:
 - Tipos correctos (`v.string()`, `v.number()`, `v.id()`)
 - FK con `v.id("tabla_destino")` en todas las relaciones
+- Tabla **Roles** con permisos (instructor, estudiante, peer, admin)
+- `usuario.rol_id` → FK **requerida** a `roles`
 - Índices en cada FK para queries rápidas
 - Campo `metadata: v.optional(v.any())` para extensibilidad
 - Comentarios en español
@@ -26,6 +28,7 @@ Creá un archivo por tabla en `convex/`:
 ```
 convex/
 ├── schema.ts          ← YA ESTÁ HECHO
+├── roles.ts           ← crear (PRIMERO - usuarios dependen de roles)
 ├── instruccion.ts     ← crear
 ├── usuario.ts         ← crear
 ├── curso.ts           ← crear
