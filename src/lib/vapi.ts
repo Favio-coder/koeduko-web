@@ -1,4 +1,9 @@
-import Vapi from "@vapi-ai/web";
+import VapiImport from "@vapi-ai/web";
+
+// Vite's CJS interop for this package sometimes fails to unwrap the default
+// export, leaving `VapiImport` as `{ default: Vapi }` instead of the class
+// itself. Fall back to the nested default when that happens.
+const Vapi = (VapiImport as unknown as { default?: typeof VapiImport }).default ?? VapiImport;
 
 /**
  * Vapi client for KOEDUKO
