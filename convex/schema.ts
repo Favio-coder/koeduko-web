@@ -179,4 +179,57 @@ export default defineSchema({
     pass_mark: v.optional(v.number()),
     createdAt: v.number(),
   }).index("by_course", ["courseId"]),
+
+  // ═════════════════════════════════════════════
+  // TABLAS VAPI + ANÁLISIS IA
+  // ═════════════════════════════════════════════
+
+  vapi_sessions: defineTable({
+    sessionId: v.id("study_sessions"),
+    vapiCallId: v.string(),
+    status: v.union(v.literal("active"), v.literal("completed"), v.literal("failed")),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_call", ["vapiCallId"]),
+
+  transcriptions: defineTable({
+    vapiSessionId: v.id("vapi_sessions"),
+    userId: v.id("usuario"),
+    rawText: v.string(),
+    timestamp: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_session", ["vapiSessionId"])
+    .index("by_user", ["userId"]),
+
+  ai_analysis: defineTable({
+    transcriptionId: v.id("transcriptions"),
+    userId: v.id("usuario"),
+    quality: v.number(), // 1-10
+    understanding: v.boolean(),
+    concepts: v.array(v.string()),
+    sentiment: v.string(), // positive, neutral, negative
+    response_text: v.string(),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_transcription", ["transcriptionId"])
+    .index("by_user", ["userId"]),
+
+  session_reports: defineTable({
+    sessionId: v.id("study_sessions"),
+    userId: v.id("usuario"),
+    totalParticipation: v.number(), // % de participación
+    avgQuality: v.number(), // promedio de calidad (1-10)
+    conceptsMastered: v.array(v.string()),
+    conceptsMissed: v.array(v.string()),
+    summaryText: v.string(),
+    recommendations: v.array(v.string()),
+    generatedAt: v.number(),
+  })
+    .index("by_session", ["sessionId"])
+    .index("by_user", ["userId"]),
 });

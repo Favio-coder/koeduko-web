@@ -26,7 +26,7 @@
 
 ---
 
-### 📊 Tablas Creadas (12 total)
+### 📊 Tablas Creadas (16 total)
 
 #### Tablas en Español (7)
 
@@ -49,6 +49,15 @@
 | 10 | `peer_connections` | Conexiones entre pares | `by_from`, `by_to` |
 | 11 | `study_sessions` | Sesiones de estudio P2P | `by_connection` |
 | 12 | `course_evaluation_criteria` | Criterios de evaluación por curso | `by_course` |
+
+#### Tablas Vapi e IA (4)
+
+| # | Tabla | Propósito | Índices |
+|---|-------|-----------|---------|
+| 13 | `vapi_sessions` | Conexión de llamada Vapi con la sesión | `by_session`, `by_call` |
+| 14 | `transcriptions` | Registro de cada frase dicha | `by_session`, `by_user` |
+| 15 | `ai_analysis` | Evaluación de IA sobre cada frase | `by_transcription`, `by_user` |
+| 16 | `session_reports` | Reporte final de sesión por usuario | `by_session`, `by_user` |
 
 ### 🔗 Relaciones Clave
 
