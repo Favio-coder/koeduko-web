@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { ConvexProvider, ConvexReactClient } from "convex/react"
 import Dashboard from "./pages/dashboard"
 import Login from "./pages/Login"
 
@@ -8,6 +9,8 @@ interface User {
   email: string
   rol_id: string
 }
+
+const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL)
 
 export default function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -32,7 +35,11 @@ export default function App() {
     return <Login />
   }
 
-  return <Dashboard user={user} onLogout={handleLogout} />
+  return (
+    <ConvexProvider client={convex}>
+      <Dashboard user={user} onLogout={handleLogout} />
+    </ConvexProvider>
+  )
 }
 
 export type { User }

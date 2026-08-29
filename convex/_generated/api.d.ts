@@ -10,6 +10,12 @@
 
 import type * as auth from "../auth.js";
 import type * as curso from "../curso.js";
+import type * as functions_analysis from "../functions/analysis.js";
+import type * as functions_realtime from "../functions/realtime.js";
+import type * as functions_reports from "../functions/reports.js";
+import type * as functions_sessions from "../functions/sessions.js";
+import type * as functions_transcriptions from "../functions/transcriptions.js";
+import type * as functions_vapi_webhook from "../functions/vapi_webhook.js";
 import type * as http from "../http.js";
 import type * as instruccion from "../instruccion.js";
 import type * as materiales from "../materiales.js";
@@ -29,6 +35,12 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   curso: typeof curso;
+  "functions/analysis": typeof functions_analysis;
+  "functions/realtime": typeof functions_realtime;
+  "functions/reports": typeof functions_reports;
+  "functions/sessions": typeof functions_sessions;
+  "functions/transcriptions": typeof functions_transcriptions;
+  "functions/vapi_webhook": typeof functions_vapi_webhook;
   http: typeof http;
   instruccion: typeof instruccion;
   materiales: typeof materiales;

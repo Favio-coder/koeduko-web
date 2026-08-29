@@ -3,6 +3,8 @@ import { useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
 import type { User } from "../App"
 import DocenteModule from "./DocenteModule"
+import { SessionLiveView } from "../components/SessionLiveView"
+import { startSession, stopSession } from "../lib/vapi"
 
 interface DashboardProps {
   user: User
@@ -11,6 +13,8 @@ interface DashboardProps {
 
 export default function Dashboard({ user, onLogout }: DashboardProps) {
   const [showDocenteModule, setShowDocenteModule] = useState(false)
+  const [sessionActive, setSessionActive] = useState(false)
+  const [sessionIds, setSessionIds] = useState({ session: "", vapi: "" })
 
   const roles = useQuery(api.roles.listar)
   const usuarios = useQuery(api.usuario.listar)
@@ -66,10 +70,49 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
         </section>
 
+        {/* Vapi Live Session Module */}
+        <section style={styles.contentCard}>
+          <div style={styles.cardHeader}>
+            <h3 style={styles.cardTitle}>Sesión Educativa en Vivo (Voz AI)</h3>
+            <p style={styles.cardDesc}>Prueba de conexión con Vapi y Claude</p>
+          </div>
+          
+          <div style={{ display: "flex", gap: "1rem", marginBottom: "2rem" }}>
+            <button 
+              onClick={async () => {
+                await startSession("session-123", user.nombre);
+                setSessionActive(true);
+                setSessionIds({ session: "session-123", vapi: "vapi-session-123" });
+              }}
+              style={styles.calloutBtn}
+            >
+              🎙️ Iniciar Llamada Vapi
+            </button>
+            {sessionActive && (
+              <button 
+                onClick={() => {
+                  stopSession();
+                  setSessionActive(false);
+                }}
+                style={{ ...styles.calloutBtn, backgroundColor: "#dc2626" }}
+              >
+                ⏹️ Detener
+              </button>
+            )}
+          </div>
+
+          {sessionActive && (
+            <SessionLiveView
+              vapiSessionId={sessionIds.vapi}
+              sessionId={sessionIds.session}
+            />
+          )}
+        </section>
+
         {/* Teacher Module Callout Card */}
         <section style={styles.docenteCalloutCard}>
           <div style={styles.calloutLeft}>
-            <div style={styles.calloutIcon}>🎙️</div>
+            <div style={styles.calloutIcon}>👨‍🏫</div>
             <div>
               <h3 style={styles.calloutTitle}>Módulo del Docente</h3>
               <p style={styles.calloutDesc}>
