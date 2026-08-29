@@ -22,6 +22,7 @@ import type * as functions_transcriptions from "../functions/transcriptions.js";
 import type * as functions_vapi_webhook from "../functions/vapi_webhook.js";
 import type * as http from "../http.js";
 import type * as instruccion from "../instruccion.js";
+import type * as lib_perfil from "../lib/perfil.js";
 import type * as materiales from "../materiales.js";
 import type * as matricula from "../matricula.js";
 import type * as modulos from "../modulos.js";
@@ -50,6 +51,7 @@ declare const fullApi: ApiFromModules<{
   "functions/vapi_webhook": typeof functions_vapi_webhook;
   http: typeof http;
   instruccion: typeof instruccion;
+  "lib/perfil": typeof lib_perfil;
   materiales: typeof materiales;
   matricula: typeof matricula;
   modulos: typeof modulos;

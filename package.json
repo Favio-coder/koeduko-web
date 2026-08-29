@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.122.0",
+    "@auth/core": "^0.41.3",
+    "@convex-dev/auth": "^0.0.95",
     "@hookform/resolvers": "^5.9.1",
     "@vapi-ai/web": "^2.7.0",
     "convex": "^1.45.0",
     "html2canvas": "^1.4.1",
+    "jose": "^6.2.10",
     "jspdf": "^4.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

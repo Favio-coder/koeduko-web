@@ -1,15 +1,17 @@
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
+import { perfilAutenticado, requerirPerfil } from "../lib/perfil";
 
 /**
  * URL de subida de un solo uso.
  *
- * El archivo va directo del navegador al storage de Convex sin pasar por una
- * mutation: el audio de una clase pesa demasiado para viajar como argumento.
+ * Exige sesión: sin esto cualquiera podría pedir URLs y llenar el storage del
+ * proyecto con archivos ajenos.
  */
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
+    await requerirPerfil(ctx);
     return await ctx.storage.generateUploadUrl();
   },
 });
@@ -18,27 +20,24 @@ export const generateUploadUrl = mutation({
  * Registra una grabación ya subida al storage.
  *
  * Se llama después de que el navegador subió el archivo y recibió su
- * storageId.
+ * storageId. El autor sale de la sesión, no de un argumento.
  */
 export const saveRecording = mutation({
   args: {
-    autorEmail: v.string(),
     storageId: v.id("_storage"),
     duracionSegundos: v.number(),
     titulo: v.optional(v.string()),
     sessionId: v.optional(v.id("study_sessions")),
   },
   handler: async (ctx, args) => {
-    const autor = await ctx.db
-      .query("usuario")
-      .withIndex("por_email", (q) => q.eq("email", args.autorEmail))
-      .first();
-
-    if (!autor) {
+    let autor;
+    try {
+      autor = await requerirPerfil(ctx);
+    } catch (error) {
       // El archivo ya está subido: si no se puede registrar, se borra para no
       // dejar audio huérfano ocupando storage sin ninguna fila que lo apunte.
       await ctx.storage.delete(args.storageId);
-      throw new Error(`No existe un usuario con el email ${args.autorEmail}`);
+      throw error;
     }
 
     return await ctx.db.insert("classroom_recordings", {
@@ -54,21 +53,15 @@ export const saveRecording = mutation({
 });
 
 /**
- * Grabaciones del docente, de la más reciente a la más vieja.
+ * Grabaciones del docente autenticado, de la más reciente a la más vieja.
  *
  * Devuelve la URL de reproducción resuelta: el storageId por sí solo no sirve
  * para un <audio src>.
  */
 export const listRecordings = query({
-  args: {
-    autorEmail: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const autor = await ctx.db
-      .query("usuario")
-      .withIndex("por_email", (q) => q.eq("email", args.autorEmail))
-      .first();
-
+  args: {},
+  handler: async (ctx) => {
+    const autor = await perfilAutenticado(ctx);
     if (!autor) return [];
 
     const grabaciones = await ctx.db
@@ -95,18 +88,14 @@ export const listRecordings = query({
 export const deleteRecording = mutation({
   args: {
     recordingId: v.id("classroom_recordings"),
-    autorEmail: v.string(),
   },
   handler: async (ctx, args) => {
+    const autor = await requerirPerfil(ctx);
+
     const grabacion = await ctx.db.get(args.recordingId);
     if (!grabacion) return;
 
-    const autor = await ctx.db
-      .query("usuario")
-      .withIndex("por_email", (q) => q.eq("email", args.autorEmail))
-      .first();
-
-    if (!autor || grabacion.autorId !== autor._id) {
+    if (grabacion.autorId !== autor._id) {
       throw new Error("No podés borrar una grabación de otro docente");
     }
 

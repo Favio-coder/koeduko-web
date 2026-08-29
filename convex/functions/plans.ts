@@ -1,12 +1,12 @@
 import { mutation, query } from "../_generated/server";
 import { v } from "convex/values";
+import { perfilAutenticado, requerirPerfil } from "../lib/perfil";
 
 /**
  * Campos que el docente completa en el formulario.
  *
- * Se declaran una sola vez y se reutilizan en crear y actualizar, para que
- * agregar un campo al plan no obligue a tocar dos listas que después se
- * desincronizan.
+ * Se declaran una sola vez y se reutilizan, para que agregar un campo al plan
+ * no obligue a tocar dos listas que después se desincronizan.
  */
 const planFields = {
   titulo: v.string(),
@@ -25,34 +25,23 @@ const planFields = {
 /**
  * Guarda un plan nuevo o actualiza uno existente.
  *
- * El id opcional evita que editar un plan y volver a guardarlo cree un
- * duplicado cada vez.
+ * El autor sale de la sesión, no de un argumento: antes el email llegaba desde
+ * el cliente y bastaba con cambiarlo para escribir en nombre de otro docente.
  */
 export const savePlan = mutation({
   args: {
     planId: v.optional(v.id("session_plans")),
-    autorEmail: v.string(),
     ...planFields,
   },
   handler: async (ctx, args) => {
-    const { planId, autorEmail, ...campos } = args;
-
-    const autor = await ctx.db
-      .query("usuario")
-      .withIndex("por_email", (q) => q.eq("email", autorEmail))
-      .first();
-
-    if (!autor) {
-      throw new Error(`No existe un usuario con el email ${autorEmail}`);
-    }
+    const { planId, ...campos } = args;
+    const autor = await requerirPerfil(ctx);
 
     if (planId) {
       const existente = await ctx.db.get(planId);
       if (!existente) {
         throw new Error(`El plan ${planId} no existe`);
       }
-      // Un plan solo lo edita quien lo escribió: sin esta comprobación
-      // cualquier docente podría sobrescribir la planificación de otro.
       if (existente.autorId !== autor._id) {
         throw new Error("No podés editar un plan de otro docente");
       }
@@ -71,18 +60,12 @@ export const savePlan = mutation({
 });
 
 /**
- * Planes del docente, del más reciente al más viejo.
+ * Planes del docente autenticado, del más reciente al más viejo.
  */
 export const listPlansByAuthor = query({
-  args: {
-    autorEmail: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const autor = await ctx.db
-      .query("usuario")
-      .withIndex("por_email", (q) => q.eq("email", args.autorEmail))
-      .first();
-
+  args: {},
+  handler: async (ctx) => {
+    const autor = await perfilAutenticado(ctx);
     if (!autor) return [];
 
     const planes = await ctx.db
@@ -99,25 +82,29 @@ export const getPlan = query({
     planId: v.id("session_plans"),
   },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.planId);
+    const autor = await perfilAutenticado(ctx);
+    if (!autor) return null;
+
+    const plan = await ctx.db.get(args.planId);
+    // Un plan ajeno se trata como inexistente: responder "no autorizado"
+    // confirmaría que ese id existe.
+    if (!plan || plan.autorId !== autor._id) return null;
+
+    return plan;
   },
 });
 
 export const deletePlan = mutation({
   args: {
     planId: v.id("session_plans"),
-    autorEmail: v.string(),
   },
   handler: async (ctx, args) => {
+    const autor = await requerirPerfil(ctx);
+
     const plan = await ctx.db.get(args.planId);
     if (!plan) return;
 
-    const autor = await ctx.db
-      .query("usuario")
-      .withIndex("por_email", (q) => q.eq("email", args.autorEmail))
-      .first();
-
-    if (!autor || plan.autorId !== autor._id) {
+    if (plan.autorId !== autor._id) {
       throw new Error("No podés borrar un plan de otro docente");
     }
 

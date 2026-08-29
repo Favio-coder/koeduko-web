@@ -1,55 +1,68 @@
 import { useState } from "react"
-import { useConvex, useQuery } from "convex/react"
-import { api } from "@convex/_generated/api"
+import { useAuthActions } from "@convex-dev/auth/react"
 
+type Modo = "signIn" | "signUp"
+
+/**
+ * Ingreso con email y contraseña.
+ *
+ * Antes alcanzaba con escribir un email existente para entrar como esa
+ * persona. Ahora la credencial la verifica el servidor.
+ *
+ * El registro no crea el perfil: eso se hace desde Gestión Académica. Alguien
+ * que se registre con un email no dado de alta entra sin rol y no puede operar,
+ * lo que evita que cualquiera se autoasigne permisos.
+ */
 export default function Login() {
+  const { signIn } = useAuthActions()
+
+  const [modo, setModo] = useState<Modo>("signIn")
   const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const convex = useConvex()
-  const users = useQuery(api.usuario.listar)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
 
-  const handleLogin = async (targetEmail?: string) => {
-    const emailToSubmit = targetEmail || email
-    if (!emailToSubmit.trim()) {
-      setError("Por favor ingresa tu correo electrónico")
+    if (!email.trim() || !password) {
+      setError("Completá el correo y la contraseña.")
       return
     }
+
+    // El proveedor exige 8 caracteres. Avisarlo acá evita un error del
+    // servidor que llega sin explicar qué le faltó a la contraseña.
+    if (modo === "signUp" && password.length < 8) {
+      setError("La contraseña debe tener al menos 8 caracteres.")
+      return
+    }
+
     setLoading(true)
     setError("")
     try {
-      const user = await convex.query(api.auth.login, { email: emailToSubmit.trim() })
-      if (user) {
-        localStorage.setItem("koeduko_user", JSON.stringify(user))
-        window.location.href = "/"
-      } else {
-        setError("Correo no registrado. Selecciona o escribe un correo de ejemplo.")
-      }
-    } catch {
-      setError("Error al conectar con la base de datos de Convex.")
+      await signIn("password", { email: email.trim(), password, flow: modo })
+    } catch (err) {
+      console.error("Error de autenticación:", err)
+      // El servidor no distingue "no existe" de "contraseña incorrecta", y está
+      // bien: decir cuál de las dos falló revela qué correos están registrados.
+      setError(
+        modo === "signIn"
+          ? "Correo o contraseña incorrectos."
+          : "No se pudo crear la cuenta. Puede que ese correo ya esté registrado."
+      )
     } finally {
       setLoading(false)
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleLogin()
-  }
-
   return (
     <div style={styles.page}>
-      {/* Background subtle ambient shapes */}
       <div style={styles.ambientGlow} />
 
       <div style={styles.card}>
         <div style={styles.logoWrapper}>
           <div style={styles.logoBadge}>
-            <img
-              src="/logEddukko-solo.png"
-              alt="KoEduko"
-              style={styles.logoImg}
-            />
+            <img src="/logEddukko-solo.png" alt="KoEduko" style={styles.logoImg} />
           </div>
         </div>
 
@@ -58,72 +71,88 @@ export default function Login() {
           <span style={styles.tagline}>Aprende sin límites • Peer to Peer</span>
         </div>
 
-        <p style={styles.subtitle}>Ingresa tu correo para acceder al panel</p>
+        <p style={styles.subtitle}>
+          {modo === "signIn"
+            ? "Ingresá con tu correo y contraseña"
+            : "Creá tu contraseña para acceder"}
+        </p>
 
-        <div style={styles.formGroup}>
-          <label htmlFor="login-email" style={styles.label}>
-            Correo electrónico
-          </label>
-          <div style={styles.inputContainer}>
+        <form onSubmit={handleSubmit}>
+          <div style={styles.formGroup}>
+            <label htmlFor="login-email" style={styles.label}>
+              Correo electrónico
+            </label>
             <input
               id="login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              onKeyDown={handleKeyPress}
               placeholder="ejemplo@koeduko.com"
               style={styles.input}
               autoComplete="email"
             />
           </div>
-        </div>
 
-        {error && (
-          <div style={styles.errorBox}>
-            <span>⚠️ {error}</span>
+          <div style={styles.formGroup}>
+            <label htmlFor="login-password" style={styles.label}>
+              Contraseña
+            </label>
+            <input
+              id="login-password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={modo === "signUp" ? "Mínimo 8 caracteres" : "••••••••"}
+              style={styles.input}
+              autoComplete={modo === "signIn" ? "current-password" : "new-password"}
+            />
           </div>
-        )}
 
-        <button
-          onClick={() => handleLogin()}
-          disabled={loading}
-          style={{
-            ...styles.submitBtn,
-            opacity: loading ? 0.75 : 1,
-            cursor: loading ? "not-allowed" : "pointer",
-          }}
-        >
-          {loading ? (
-            <span style={styles.btnContent}>
-              <span style={styles.spinner} /> Entrando...
-            </span>
-          ) : (
-            "Iniciar Sesión"
-          )}
-        </button>
-
-        {/* Demo Users Section */}
-        {users && users.length > 0 && (
-          <div style={styles.demoSection}>
-            <p style={styles.demoTitle}>Usuarios registrados en el sistema:</p>
-            <div style={styles.demoList}>
-              {users.slice(0, 4).map((u) => (
-                <button
-                  key={u._id}
-                  type="button"
-                  onClick={() => {
-                    setEmail(u.email)
-                    handleLogin(u.email)
-                  }}
-                  style={styles.demoChip}
-                >
-                  <span style={styles.demoName}>{u.nombre}</span>
-                  <span style={styles.demoEmail}>{u.email}</span>
-                </button>
-              ))}
+          {error && (
+            <div style={styles.errorBox}>
+              <span>⚠️ {error}</span>
             </div>
-          </div>
-        )}
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              ...styles.submitBtn,
+              opacity: loading ? 0.75 : 1,
+              cursor: loading ? "not-allowed" : "pointer",
+            }}
+          >
+            {loading ? (
+              <span style={styles.btnContent}>
+                <span style={styles.spinner} />
+                {modo === "signIn" ? "Entrando..." : "Creando cuenta..."}
+              </span>
+            ) : modo === "signIn" ? (
+              "Iniciar Sesión"
+            ) : (
+              "Crear cuenta"
+            )}
+          </button>
+        </form>
+
+        <div style={styles.switchSection}>
+          <p style={styles.switchText}>
+            {modo === "signIn"
+              ? "¿Primera vez? Si ya te registraron en KoEduko, creá tu contraseña con el mismo correo."
+              : "¿Ya tenés contraseña?"}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setModo((m) => (m === "signIn" ? "signUp" : "signIn"))
+              setError("")
+            }}
+            style={styles.switchBtn}
+          >
+            {modo === "signIn" ? "Crear mi contraseña" : "Volver a iniciar sesión"}
+          </button>
+        </div>
       </div>
 
       <footer style={styles.pageFooter}>
@@ -279,6 +308,30 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: "50%",
     animation: "spin 0.8s linear infinite",
     display: "inline-block",
+  },
+  switchSection: {
+    marginTop: "24px",
+    paddingTop: "20px",
+    borderTop: "1px solid #f1f5f9",
+    width: "100%",
+    textAlign: "center" as const,
+  },
+  switchText: {
+    fontSize: "12px",
+    color: "#64748b",
+    margin: "0 0 10px 0",
+    lineHeight: 1.5,
+  },
+  switchBtn: {
+    padding: "10px 18px",
+    backgroundColor: "#f0f7f2",
+    color: "#2e7d48",
+    border: "1px solid #c8e6d0",
+    borderRadius: "10px",
+    fontSize: "13px",
+    fontWeight: 600,
+    cursor: "pointer",
+    width: "100%",
   },
   demoSection: {
     marginTop: "28px",

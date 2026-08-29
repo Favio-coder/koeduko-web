@@ -3,10 +3,6 @@ import { useMutation, useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 
-interface AudioRecorderProps {
-  userEmail: string
-}
-
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
@@ -30,7 +26,7 @@ const formatFecha = (timestamp: number) =>
  * provee. Hasta entonces el estado se muestra como pendiente en lugar de
  * mostrar un análisis que nadie calculó.
  */
-export default function AudioRecorder({ userEmail }: AudioRecorderProps) {
+export default function AudioRecorder() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
   const [subiendo, setSubiendo] = useState(false)
@@ -46,9 +42,7 @@ export default function AudioRecorder({ userEmail }: AudioRecorderProps) {
   const generateUploadUrl = useMutation(api.functions.recordings.generateUploadUrl)
   const saveRecording = useMutation(api.functions.recordings.saveRecording)
   const deleteRecording = useMutation(api.functions.recordings.deleteRecording)
-  const grabaciones = useQuery(api.functions.recordings.listRecordings, {
-    autorEmail: userEmail,
-  })
+  const grabaciones = useQuery(api.functions.recordings.listRecordings, {})
 
   useEffect(() => {
     return () => {
@@ -78,7 +72,6 @@ export default function AudioRecorder({ userEmail }: AudioRecorderProps) {
       }
 
       await saveRecording({
-        autorEmail: userEmail,
         storageId,
         duracionSegundos,
         titulo: `Clase del ${formatFecha(Date.now())}`,
@@ -150,7 +143,7 @@ export default function AudioRecorder({ userEmail }: AudioRecorderProps) {
 
   const handleEliminar = async (recordingId: Id<"classroom_recordings">) => {
     try {
-      await deleteRecording({ recordingId, autorEmail: userEmail })
+      await deleteRecording({ recordingId })
     } catch (err) {
       console.error("No se pudo eliminar la grabación:", err)
       setError(

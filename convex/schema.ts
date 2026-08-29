@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 /**
  * KOEDUKO - Schema de Base de Datos (Tablas en Español)
@@ -19,6 +20,11 @@ import { v } from "convex/values";
  */
 
 export default defineSchema({
+  // Tablas de @convex-dev/auth (users, authAccounts, authSessions...).
+  // Guardan solo credenciales y sesiones: el perfil del usuario sigue en la
+  // tabla `usuario` de abajo, vinculado por email.
+  ...authTables,
+
   // ─────────────────────────────────────────────
   // ROLES
   // Define los tipos de usuario en la plataforma.

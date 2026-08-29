@@ -19,9 +19,7 @@ type TabKey = "aula" | "plan_form" | "plan_pdf" | "grouping"
 export default function DocenteModule({ user, onBackToDashboard }: DocenteModuleProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("aula")
 
-  const planesGuardados = useQuery(api.functions.plans.listPlansByAuthor, {
-    autorEmail: user.email,
-  })
+  const planesGuardados = useQuery(api.functions.plans.listPlansByAuthor, {})
   const savePlan = useMutation(api.functions.plans.savePlan)
 
   // Plan que se está editando. Null significa "uno nuevo": el formulario
@@ -61,7 +59,6 @@ export default function DocenteModule({ user, onBackToDashboard }: DocenteModule
     try {
       const id = await savePlan({
         planId: planId ?? undefined,
-        autorEmail: user.email,
         ...data,
       })
       setPlanId(id)
@@ -164,7 +161,7 @@ export default function DocenteModule({ user, onBackToDashboard }: DocenteModule
           {activeTab === "aula" && (
             <>
               <VapiAssistant userEmail={user.email} userName={user.nombre} />
-              <AudioRecorder userEmail={user.email} />
+              <AudioRecorder />
             </>
           )}
 
