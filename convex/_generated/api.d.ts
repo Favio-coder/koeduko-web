@@ -17,6 +17,8 @@ import type * as functions_plans from "../functions/plans.js";
 import type * as functions_realtime from "../functions/realtime.js";
 import type * as functions_recordings from "../functions/recordings.js";
 import type * as functions_reports from "../functions/reports.js";
+import type * as functions_reports_ai from "../functions/reports_ai.js";
+import type * as functions_reports_data from "../functions/reports_data.js";
 import type * as functions_sessions from "../functions/sessions.js";
 import type * as functions_transcriptions from "../functions/transcriptions.js";
 import type * as functions_vapi_webhook from "../functions/vapi_webhook.js";
@@ -46,6 +48,8 @@ declare const fullApi: ApiFromModules<{
   "functions/realtime": typeof functions_realtime;
   "functions/recordings": typeof functions_recordings;
   "functions/reports": typeof functions_reports;
+  "functions/reports_ai": typeof functions_reports_ai;
+  "functions/reports_data": typeof functions_reports_data;
   "functions/sessions": typeof functions_sessions;
   "functions/transcriptions": typeof functions_transcriptions;
   "functions/vapi_webhook": typeof functions_vapi_webhook;

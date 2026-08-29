@@ -146,9 +146,20 @@ export const scheduleSessionReport = mutation({
     vapiCallId: v.string(),
   },
   handler: async (ctx, args) => {
+    // Primero el reporte por plantilla: es instantáneo y no depende de la API
+    // de Claude, así que la sesión siempre termina con algo que mostrar.
     await ctx.scheduler.runAfter(
       REPORT_DELAY_MS,
       api.functions.reports.generateSessionReport,
+      { vapiCallId: args.vapiCallId }
+    );
+
+    // Y unos segundos después el reporte escrito por Claude, que reemplaza al
+    // anterior. Separarlos evita que un fallo de la API deje al docente sin
+    // ningún reporte.
+    await ctx.scheduler.runAfter(
+      REPORT_DELAY_MS + 5_000,
+      api.functions.reports_ai.generateAIReports,
       { vapiCallId: args.vapiCallId }
     );
   },
