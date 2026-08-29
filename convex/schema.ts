@@ -201,9 +201,28 @@ export default defineSchema({
     rawText: v.string(),
     timestamp: v.number(),
     createdAt: v.number(),
+
+    // Quién habló. Se guardan las dos partes de la conversación, no solo al
+    // estudiante: el reporte necesita la pregunta para interpretar la respuesta.
+    role: v.optional(v.union(v.literal("user"), v.literal("assistant"))),
+
+    // Segundo de la llamada en que arranca la frase, tal como lo reporta Vapi.
+    // Ordena la conversación mejor que createdAt, que depende de cuándo llegó
+    // el evento y no de cuándo se dijo.
+    secondsFromStart: v.optional(v.number()),
+
+    // Clave de idempotencia. El navegador y el webhook transcriben la misma
+    // llamada en paralelo, así que la misma frase llega dos veces por caminos
+    // distintos; sin esta clave la sesión quedaría duplicada entera.
+    dedupeKey: v.optional(v.string()),
+
+    // Vía por la que entró la frase. Solo para diagnóstico: permite ver si el
+    // webhook está llegando o si todo viene del navegador.
+    source: v.optional(v.union(v.literal("client"), v.literal("webhook"))),
   })
     .index("by_session", ["vapiSessionId"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_dedupe", ["dedupeKey"]),
 
   ai_analysis: defineTable({
     transcriptionId: v.id("transcriptions"),
@@ -232,4 +251,59 @@ export default defineSchema({
   })
     .index("by_session", ["sessionId"])
     .index("by_user", ["userId"]),
+
+  // ─────────────────────────────────────────────
+  // PLANES DE SESIÓN
+  // Planificación que arma el docente antes de la clase.
+  // "curso" y "grado" son texto libre y no FK a curso/instruccion: el docente
+  // escribe el nombre a mano en el formulario. Si más adelante se eligen de una
+  // lista, pasan a ser referencias.
+  // ─────────────────────────────────────────────
+  session_plans: defineTable({
+    autorId: v.id("usuario"), // FK al docente que lo redactó
+
+    titulo: v.string(),
+    curso: v.string(),
+    grado: v.string(),
+    duracion: v.string(),
+    fecha: v.string(), // ISO corta (YYYY-MM-DD), tal como la emite el <input type="date">
+
+    proposito: v.string(),
+    inicioActividades: v.string(),
+    desarrolloActividades: v.string(),
+    cierreActividades: v.string(),
+    evaluacionEstrategia: v.string(),
+    materialesRequeridos: v.string(),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_autor", ["autorId"]),
+
+  // ─────────────────────────────────────────────
+  // GRABACIONES DE AULA
+  // Audio que el docente graba durante la clase. El archivo vive en el file
+  // storage de Convex; acá queda solo la referencia.
+  //
+  // "transcripcion" está vacía hasta que haya un servicio de speech-to-text:
+  // Claude analiza texto, no audio. El campo se deja preparado para no tener
+  // que migrar la tabla cuando se conecte.
+  // ─────────────────────────────────────────────
+  classroom_recordings: defineTable({
+    autorId: v.id("usuario"), // FK al docente que grabó
+
+    storageId: v.id("_storage"), // Referencia al archivo en Convex storage
+    duracionSegundos: v.number(),
+    titulo: v.optional(v.string()),
+
+    // Opcional: una grabación puede hacerse fuera de una sesión con el
+    // asistente, así que no se exige vincularla a una.
+    sessionId: v.optional(v.id("study_sessions")),
+
+    transcripcion: v.optional(v.string()),
+    estado: v.union(v.literal("guardada"), v.literal("transcrita")),
+
+    createdAt: v.number(),
+  })
+    .index("by_autor", ["autorId"])
+    .index("by_session", ["sessionId"]),
 });
