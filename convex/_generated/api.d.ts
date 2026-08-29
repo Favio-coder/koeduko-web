@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as auth from "../auth.js";
 import type * as curso from "../curso.js";
 import type * as functions_analysis from "../functions/analysis.js";
 import type * as functions_realtime from "../functions/realtime.js";
@@ -21,6 +22,7 @@ import type * as materiales from "../materiales.js";
 import type * as matricula from "../matricula.js";
 import type * as modulos from "../modulos.js";
 import type * as roles from "../roles.js";
+import type * as seed from "../seed.js";
 import type * as usuario from "../usuario.js";
 import type * as vapi from "../vapi.js";
 
@@ -31,6 +33,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auth: typeof auth;
   curso: typeof curso;
   "functions/analysis": typeof functions_analysis;
   "functions/realtime": typeof functions_realtime;
@@ -44,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   matricula: typeof matricula;
   modulos: typeof modulos;
   roles: typeof roles;
+  seed: typeof seed;
   usuario: typeof usuario;
   vapi: typeof vapi;
 }>;
