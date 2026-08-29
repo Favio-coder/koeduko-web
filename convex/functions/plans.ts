@@ -77,6 +77,86 @@ export const listPlansByAuthor = query({
   },
 });
 
+/**
+ * Qué conviene reforzar en la próxima clase, según las sesiones ya analizadas.
+ *
+ * Cierra el circuito escuchar → analizar → planificar: el docente no tiene que
+ * releer los reportes uno por uno para saber por dónde empezar.
+ */
+export const sugerenciasParaPlan = query({
+  args: {},
+  handler: async (ctx) => {
+    const docente = await perfilAutenticado(ctx);
+    if (!docente) return null;
+
+    // Se miran los reportes recientes de toda la plataforma, no solo los de
+    // este docente: los reportes se guardan por estudiante, no por autor.
+    const reportes = await ctx.db.query("session_reports").take(200);
+
+    if (reportes.length === 0) {
+      return { conceptos: [], estudiantesEnRefuerzo: [], sesionesAnalizadas: 0 };
+    }
+
+    // Cuántos estudiantes distintos arrastran cada concepto: un tema que
+    // aparece en varios pesa más que uno que le costó a una sola persona.
+    const porConcepto = new Map<string, Set<string>>();
+    const estudiantesEnRefuerzo: { nombre: string; avgQuality: number }[] = [];
+
+    // Los reportes generados antes de excluir a los docentes siguen en la base.
+    // Se filtra por rol acá también para que un reporte viejo del profesor no
+    // ensucie las sugerencias.
+    const rolPorUsuario = new Map<string, string | null>();
+    const esDocente = async (userId: (typeof reportes)[number]["userId"]) => {
+      if (!rolPorUsuario.has(userId)) {
+        const usuario = await ctx.db.get(userId);
+        const rol = usuario ? await ctx.db.get(usuario.rol_id) : null;
+        rolPorUsuario.set(userId, rol?.nombre ?? null);
+      }
+      return rolPorUsuario.get(userId) === "docente";
+    };
+
+    for (const reporte of reportes) {
+      if (await esDocente(reporte.userId)) continue;
+
+      for (const concepto of reporte.conceptsMissed) {
+        const clave = concepto.trim().toLowerCase();
+        if (!clave) continue;
+        const conjunto = porConcepto.get(clave) ?? new Set<string>();
+        conjunto.add(reporte.userId);
+        porConcepto.set(clave, conjunto);
+      }
+
+      if (reporte.avgQuality > 0 && reporte.avgQuality < 5) {
+        const usuario = await ctx.db.get(reporte.userId);
+        if (usuario) {
+          estudiantesEnRefuerzo.push({
+            nombre: usuario.nombre,
+            avgQuality: reporte.avgQuality,
+          });
+        }
+      }
+    }
+
+    const conceptos = [...porConcepto.entries()]
+      .map(([concepto, estudiantes]) => ({
+        concepto,
+        estudiantes: estudiantes.size,
+      }))
+      .sort((a, b) => b.estudiantes - a.estudiantes)
+      .slice(0, 6);
+
+    const sesiones = new Set(reportes.map((r) => r.sessionId));
+
+    return {
+      conceptos,
+      estudiantesEnRefuerzo: estudiantesEnRefuerzo
+        .sort((a, b) => a.avgQuality - b.avgQuality)
+        .slice(0, 5),
+      sesionesAnalizadas: sesiones.size,
+    };
+  },
+});
+
 export const getPlan = query({
   args: {
     planId: v.id("session_plans"),

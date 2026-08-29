@@ -7,6 +7,7 @@ import SessionPlanForm, { type SessionPlanData } from "../components/teacher/Ses
 import SessionPlanPdf from "../components/teacher/SessionPlanPdf"
 import StudentGroupings from "../components/teacher/StudentGroupings"
 import VapiAssistant from "../components/teacher/VapiAssistant"
+import SugerenciasPlan from "../components/teacher/SugerenciasPlan"
 import type { User } from "../App"
 
 interface DocenteModuleProps {
@@ -167,6 +168,7 @@ export default function DocenteModule({ user, onBackToDashboard }: DocenteModule
 
           {activeTab === "plan_form" && (
             <>
+              <SugerenciasPlan />
               <PlanesGuardados
                 planes={planesGuardados}
                 planIdActivo={planId}
