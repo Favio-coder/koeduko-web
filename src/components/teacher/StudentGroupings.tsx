@@ -1,85 +1,137 @@
-import { useState } from "react"
+import { useMemo } from "react"
+import { useQuery } from "convex/react"
+import { api } from "@convex/_generated/api"
 
-export interface Student {
+type Nivel = "Avanzado" | "Intermedio" | "Refuerzo"
+
+interface StudentPerformance {
   id: string
   nombre: string
-  nivel: "Avanzado" | "Intermedio" | "Refuerzo"
-  desempenoAudio: number
   carrera: string
+  avgQuality: number | null
+  participacion: number | null
+  conceptosFlojos: string[]
+  sesionesEvaluadas: number
 }
 
-export interface Group {
+interface EvaluatedStudent extends StudentPerformance {
+  avgQuality: number
+  nivel: Nivel
+}
+
+interface Group {
   id: string
   nombre: string
-  estudiantes: Student[]
-  retoAsignado: string
+  estudiantes: EvaluatedStudent[]
+  conceptosAReforzar: string[]
 }
 
-interface StudentGroupingsProps {
-  studentsList?: Student[]
+/** La calidad promedio viene en escala 1-10 desde session_reports. */
+function nivelDe(avgQuality: number): Nivel {
+  if (avgQuality >= 8) return "Avanzado"
+  if (avgQuality >= 5) return "Intermedio"
+  return "Refuerzo"
 }
 
-const DEFAULT_STUDENTS: Student[] = [
-  { id: "1", nombre: "Carlos Mendoza", nivel: "Avanzado", desempenoAudio: 92, carrera: "Ingeniería" },
-  { id: "2", nombre: "Lucía Fernández", nivel: "Refuerzo", desempenoAudio: 64, carrera: "Diseño" },
-  { id: "3", nombre: "Miguel Torres", nivel: "Intermedio", desempenoAudio: 78, carrera: "Programación" },
-  { id: "4", nombre: "Sofía Ramos", nivel: "Avanzado", desempenoAudio: 88, carrera: "Matemáticas" },
-  { id: "5", nombre: "Jorge Benítez", nivel: "Refuerzo", desempenoAudio: 58, carrera: "Sistemas" },
-  { id: "6", nombre: "Elena Gómez", nivel: "Intermedio", desempenoAudio: 81, carrera: "Estadística" },
-  { id: "7", nombre: "Diego Paredes", nivel: "Refuerzo", desempenoAudio: 61, carrera: "Física" },
-  { id: "8", nombre: "Valeria Ríos", nivel: "Avanzado", desempenoAudio: 95, carrera: "Informática" },
-]
+/**
+ * Equipos que mezclan un estudiante de cada nivel, para que el de mayor
+ * desempeño pueda acompañar al que necesita refuerzo.
+ */
+function armarGrupos(evaluados: EvaluatedStudent[]): Group[] {
+  const ordenados = [...evaluados].sort((a, b) => b.avgQuality - a.avgQuality)
+  const avanzados = ordenados.filter((s) => s.nivel === "Avanzado")
+  const intermedios = ordenados.filter((s) => s.nivel === "Intermedio")
+  const refuerzo = ordenados.filter((s) => s.nivel === "Refuerzo")
 
-export default function StudentGroupings({ studentsList = DEFAULT_STUDENTS }: StudentGroupingsProps) {
-  const [groups, setGroups] = useState<Group[]>(() => generatePeerGroups(studentsList))
+  const cantidadGrupos = Math.max(
+    avanzados.length,
+    intermedios.length,
+    refuerzo.length
+  )
 
-  function generatePeerGroups(list: Student[]): Group[] {
-    const sorted = [...list].sort((a, b) => b.desempenoAudio - a.desempenoAudio)
-    const advanced = sorted.filter((s) => s.nivel === "Avanzado")
-    const intermediate = sorted.filter((s) => s.nivel === "Intermedio")
-    const support = sorted.filter((s) => s.nivel === "Refuerzo")
+  const grupos: Group[] = []
+  for (let i = 0; i < cantidadGrupos; i++) {
+    const integrantes = [avanzados[i], intermedios[i], refuerzo[i]].filter(
+      (s): s is EvaluatedStudent => Boolean(s)
+    )
 
-    const newGroups: Group[] = []
-    const numGroups = Math.max(advanced.length, 2)
+    if (integrantes.length === 0) continue
 
-    for (let i = 0; i < numGroups; i++) {
-      const members: Student[] = []
-      if (advanced[i]) members.push(advanced[i])
-      if (intermediate[i]) members.push(intermediate[i])
-      if (support[i]) members.push(support[i])
-
-      // Any overflow
-      if (!members.length && sorted[i]) members.push(sorted[i])
-
-      newGroups.push({
-        id: `group-${i + 1}`,
-        nombre: `Equipo Peer #${i + 1}`,
-        estudiantes: members,
-        retoAsignado:
-          i === 0
-            ? "Implementar función recursiva con manejo de excepciones"
-            : i === 1
-            ? "Construir algoritmo de búsqueda binaria y probar casos borde"
-            : "Diseñar estructura de datos para carrito de compras",
-      })
-    }
-
-    return newGroups
+    grupos.push({
+      id: `group-${i + 1}`,
+      nombre: `Equipo Peer #${i + 1}`,
+      estudiantes: integrantes,
+      // El foco sale de lo que el análisis marcó como no dominado, no de una
+      // lista fija de temas.
+      conceptosAReforzar: [
+        ...new Set(integrantes.flatMap((s) => s.conceptosFlojos)),
+      ].slice(0, 4),
+    })
   }
 
-  const handleRegenerate = () => {
-    setGroups(generatePeerGroups(studentsList))
+  return grupos
+}
+
+export default function StudentGroupings() {
+  const performance = useQuery(api.functions.groupings.listStudentPerformance) as
+    | StudentPerformance[]
+    | undefined
+
+  const { grupos, evaluados, sinDatos } = useMemo(() => {
+    if (!performance) {
+      return { grupos: [], evaluados: [], sinDatos: [] as StudentPerformance[] }
+    }
+
+    const evaluados: EvaluatedStudent[] = performance
+      .filter((s): s is StudentPerformance & { avgQuality: number } =>
+        s.avgQuality !== null
+      )
+      .map((s) => ({ ...s, nivel: nivelDe(s.avgQuality) }))
+
+    return {
+      grupos: armarGrupos(evaluados),
+      evaluados,
+      sinDatos: performance.filter((s) => s.avgQuality === null),
+    }
+  }, [performance])
+
+  if (performance === undefined) {
+    return (
+      <div style={styles.card}>
+        <div style={styles.loadingBox}>
+          <span style={styles.spinner} />
+          <span>Cargando estudiantes desde Convex...</span>
+        </div>
+      </div>
+    )
   }
 
-  const getNivelBadge = (nivel: Student["nivel"]) => {
-    switch (nivel) {
-      case "Avanzado":
-        return <span style={{ ...styles.badge, backgroundColor: "#e0f2fe", color: "#0369a1" }}>⚡ Avanzado</span>
-      case "Intermedio":
-        return <span style={{ ...styles.badge, backgroundColor: "#fef3c7", color: "#92400e" }}>⚖️ Intermedio</span>
-      case "Refuerzo":
-        return <span style={{ ...styles.badge, backgroundColor: "#fee2e2", color: "#b91c1c" }}>🌱 Refuerzo</span>
+  if (performance.length === 0) {
+    return (
+      <div style={styles.card}>
+        <div style={styles.emptyBox}>
+          <p style={styles.emptyTitle}>No hay estudiantes registrados</p>
+          <p style={styles.emptyDesc}>
+            Se agrupan los usuarios con rol "estudiante". Registrá estudiantes
+            para poder formar equipos.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  const nivelBadge = (nivel: Nivel) => {
+    const estilos: Record<Nivel, React.CSSProperties> = {
+      Avanzado: { backgroundColor: "#e0f2fe", color: "#0369a1" },
+      Intermedio: { backgroundColor: "#fef3c7", color: "#92400e" },
+      Refuerzo: { backgroundColor: "#fee2e2", color: "#b91c1c" },
     }
+    const icono = { Avanzado: "⚡", Intermedio: "⚖️", Refuerzo: "🌱" }[nivel]
+    return (
+      <span style={{ ...styles.badge, ...estilos[nivel] }}>
+        {icono} {nivel}
+      </span>
+    )
   }
 
   return (
@@ -90,25 +142,30 @@ export default function StudentGroupings({ studentsList = DEFAULT_STUDENTS }: St
           <div>
             <h3 style={styles.title}>Agrupaciones Inteligentes Peer-to-Peer</h3>
             <p style={styles.subtitle}>
-              Equipos balanceados según el análisis de rendimiento escuchado en la sesión
+              Equipos balanceados según los reportes de las sesiones analizadas
             </p>
           </div>
         </div>
 
-        <button onClick={handleRegenerate} style={styles.refreshBtn}>
-          🔄 Re-generar Equipos
-        </button>
+        <div style={styles.livePill}>
+          <span style={styles.pulseDot} />
+          <span>Actualizado en vivo</span>
+        </div>
       </div>
 
       {/* Summary Chips */}
       <div style={styles.summaryBar}>
         <div style={styles.summaryItem}>
-          <span style={styles.summaryLabel}>Total Estudiantes</span>
-          <span style={styles.summaryVal}>{studentsList.length}</span>
+          <span style={styles.summaryLabel}>Estudiantes</span>
+          <span style={styles.summaryVal}>{performance.length}</span>
+        </div>
+        <div style={styles.summaryItem}>
+          <span style={styles.summaryLabel}>Con desempeño medido</span>
+          <span style={styles.summaryVal}>{evaluados.length}</span>
         </div>
         <div style={styles.summaryItem}>
           <span style={styles.summaryLabel}>Grupos Formados</span>
-          <span style={styles.summaryVal}>{groups.length}</span>
+          <span style={styles.summaryVal}>{grupos.length}</span>
         </div>
         <div style={styles.summaryItem}>
           <span style={styles.summaryLabel}>Estrategia Peer</span>
@@ -117,40 +174,85 @@ export default function StudentGroupings({ studentsList = DEFAULT_STUDENTS }: St
       </div>
 
       {/* Groups Grid */}
-      <div style={styles.groupsGrid}>
-        {groups.map((group) => (
-          <div key={group.id} style={styles.groupCard}>
-            <div style={styles.groupHeader}>
-              <span style={styles.groupTitle}>{group.nombre}</span>
-              <span style={styles.groupCount}>{group.estudiantes.length} integrantes</span>
-            </div>
+      {grupos.length > 0 && (
+        <div style={styles.groupsGrid}>
+          {grupos.map((group) => (
+            <div key={group.id} style={styles.groupCard}>
+              <div style={styles.groupHeader}>
+                <span style={styles.groupTitle}>{group.nombre}</span>
+                <span style={styles.groupCount}>
+                  {group.estudiantes.length} integrantes
+                </span>
+              </div>
 
-            <div style={styles.challengeBox}>
-              <span style={styles.challengeLabel}>🎯 Reto asignado al equipo:</span>
-              <p style={styles.challengeText}>"{group.retoAsignado}"</p>
-            </div>
+              <div style={styles.challengeBox}>
+                <span style={styles.challengeLabel}>
+                  🎯 Conceptos a reforzar en el equipo:
+                </span>
+                {group.conceptosAReforzar.length > 0 ? (
+                  <div style={styles.chipsRow}>
+                    {group.conceptosAReforzar.map((concepto) => (
+                      <span key={concepto} style={styles.conceptChip}>
+                        {concepto}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={styles.challengeText}>
+                    El análisis todavía no marcó conceptos pendientes en este equipo.
+                  </p>
+                )}
+              </div>
 
-            <div style={styles.membersList}>
-              <span style={styles.membersHeader}>Integrantes y Rol Peer:</span>
-              {group.estudiantes.map((student, sIdx) => (
-                <div key={student.id} style={styles.memberRow}>
-                  <div style={styles.studentInfo}>
-                    <span style={styles.roleTag}>
-                      {sIdx === 0 ? "👑 Facilitador" : sIdx === 1 ? "📝 Sintetizador" : "🤝 Co-estudiante"}
-                    </span>
-                    <span style={styles.studentName}>{student.nombre}</span>
-                    <span style={styles.studentMeta}>({student.carrera})</span>
+              <div style={styles.membersList}>
+                <span style={styles.membersHeader}>Integrantes y Rol Peer:</span>
+                {group.estudiantes.map((student, sIdx) => (
+                  <div key={student.id} style={styles.memberRow}>
+                    <div style={styles.studentInfo}>
+                      <span style={styles.roleTag}>
+                        {sIdx === 0
+                          ? "👑 Facilitador"
+                          : sIdx === 1
+                          ? "📝 Sintetizador"
+                          : "🤝 Co-estudiante"}
+                      </span>
+                      <span style={styles.studentName}>{student.nombre}</span>
+                      <span style={styles.studentMeta}>({student.carrera})</span>
+                    </div>
+                    <div style={styles.studentStats}>
+                      {nivelBadge(student.nivel)}
+                      <span style={styles.scorePill}>
+                        {student.avgQuality}/10
+                      </span>
+                    </div>
                   </div>
-                  <div style={styles.studentStats}>
-                    {getNivelBadge(student.nivel)}
-                    <span style={styles.scorePill}>{student.desempenoAudio}% audio</span>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+          ))}
+        </div>
+      )}
+
+      {/* Estudiantes todavía sin reportes */}
+      {sinDatos.length > 0 && (
+        <div style={styles.pendingSection}>
+          <h4 style={styles.pendingTitle}>
+            Sin desempeño medido todavía ({sinDatos.length})
+          </h4>
+          <p style={styles.pendingDesc}>
+            Estos estudiantes no participaron aún en una sesión analizada, así que
+            no se pueden agrupar por rendimiento.
+          </p>
+          <div style={styles.pendingList}>
+            {sinDatos.map((student) => (
+              <div key={student.id} style={styles.pendingChip}>
+                <span style={styles.studentName}>{student.nombre}</span>
+                <span style={styles.studentMeta}>{student.carrera}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -199,14 +301,22 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#64748b",
     margin: 0,
   },
-  refreshBtn: {
-    padding: "10px 18px",
-    backgroundColor: "#f0f7f2",
+  livePill: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    padding: "6px 14px",
+    backgroundColor: "#eaf5ed",
     color: "#2e7d48",
-    border: "1px solid #c8e6d0",
-    borderRadius: "10px",
-    fontSize: "13px",
+    borderRadius: "20px",
+    fontSize: "12px",
     fontWeight: 600,
+  },
+  pulseDot: {
+    width: "8px",
+    height: "8px",
+    borderRadius: "50%",
+    backgroundColor: "#2e7d48",
   },
   summaryBar: {
     display: "flex",
@@ -277,12 +387,27 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     color: "#475569",
     display: "block",
+    marginBottom: "6px",
   },
   challengeText: {
     fontSize: "12px",
-    color: "#1e293b",
+    color: "#64748b",
     fontStyle: "italic",
-    margin: "2px 0 0 0",
+    margin: 0,
+  },
+  chipsRow: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "6px",
+  },
+  conceptChip: {
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "#1e293b",
+    backgroundColor: "#ffffff",
+    padding: "4px 10px",
+    borderRadius: "12px",
+    border: "1px solid #cbd5e1",
   },
   membersList: {
     display: "flex",
@@ -336,9 +461,71 @@ const styles: Record<string, React.CSSProperties> = {
   },
   scorePill: {
     fontSize: "11px",
-    color: "#64748b",
+    fontWeight: 600,
+    color: "#475569",
     backgroundColor: "#f1f5f9",
-    padding: "2px 6px",
+    padding: "2px 8px",
     borderRadius: "6px",
+  },
+  pendingSection: {
+    paddingTop: "20px",
+    borderTop: "1px solid #f1f5f9",
+  },
+  pendingTitle: {
+    fontSize: "14px",
+    fontWeight: 700,
+    color: "#1e293b",
+    margin: "0 0 4px 0",
+  },
+  pendingDesc: {
+    fontSize: "12px",
+    color: "#64748b",
+    margin: "0 0 12px 0",
+  },
+  pendingList: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "8px",
+  },
+  pendingChip: {
+    display: "flex",
+    flexDirection: "column",
+    padding: "8px 14px",
+    backgroundColor: "#f8faf8",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+  },
+  loadingBox: {
+    padding: "40px",
+    textAlign: "center" as const,
+    color: "#64748b",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "12px",
+  },
+  spinner: {
+    width: "18px",
+    height: "18px",
+    border: "2px solid #cbd5e1",
+    borderTopColor: "#2e7d48",
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite",
+    display: "inline-block",
+  },
+  emptyBox: {
+    padding: "32px",
+    textAlign: "center" as const,
+  },
+  emptyTitle: {
+    fontSize: "15px",
+    fontWeight: 700,
+    color: "#1e293b",
+    margin: "0 0 6px 0",
+  },
+  emptyDesc: {
+    fontSize: "13px",
+    color: "#64748b",
+    margin: 0,
   },
 }
