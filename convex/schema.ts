@@ -7,7 +7,7 @@ import { v } from "convex/values";
  * Plataforma educativa peer-to-peer.
  * "Menos escuelas, más aprendizaje"
  *
- * Este schema define las 6 tablas core en español.
+ * Este schema define las 7 tablas core en español.
  * El otro dev agregará tablas en inglés (Learning_Progress, Peer_profile, etc.)
  *
  * Convenciones:
@@ -20,9 +20,23 @@ import { v } from "convex/values";
 
 export default defineSchema({
   // ─────────────────────────────────────────────
+  // ROLES
+  // Define los tipos de usuario en la plataforma.
+  // Cada usuario DEBE tener un rol asignado.
+  // Valores esperados: "instructor", "estudiante", "peer", "admin"
+  // ─────────────────────────────────────────────
+  roles: defineTable({
+    nombre: v.string(), // Nombre del rol (ej: "instructor", "estudiante")
+    desc: v.string(), // Descripción del rol y sus responsabilidades
+    permisos: v.optional(v.any()), // Metadata flexible de permisos
+    crea: v.number(), // Timestamp de creación (Date.now())
+    metadata: v.optional(v.any()), // Campo extensible
+  }).index("por_nombre", ["nombre"]),
+
+  // ─────────────────────────────────────────────
   // INSTRUCCIÓN
-  // Representa roles o niveles educativos (ej: "Universitario", "Técnico", "Autodidacta").
-  // Es la tabla raíz: Usuario y Curso referencian a ella.
+  // Representa niveles educativos (ej: "Universitario", "Técnico", "Autodidacta").
+  // Es tabla raíz: Usuario y Curso referencian a ella.
   // ─────────────────────────────────────────────
   instruccion: defineTable({
     nombre: v.string(), // Nombre del nivel/rol (ej: "Pregrado")
@@ -34,7 +48,7 @@ export default defineSchema({
   // ─────────────────────────────────────────────
   // USUARIO
   // Datos de los usuarios de la plataforma.
-  // Pueden ser instructores o pares según el contexto.
+  // "rol_id" define qué puede hacer (instructor, estudiante, peer, admin).
   // "es_st" vincula al usuario con su nivel de instrucción (opcional).
   // ─────────────────────────────────────────────
   usuario: defineTable({
@@ -42,11 +56,13 @@ export default defineSchema({
     genero: v.string(), // Género del usuario
     email: v.string(), // Email (único por usuario)
     carrera: v.string(), // Carrera o área de estudio
+    rol_id: v.id("roles"), // FK a roles (REQUERIDO - define permisos)
     es_st: v.optional(v.id("instruccion")), // FK a instruccion (opcional, puede ser null)
     crea: v.number(), // Timestamp de creación
     metadata: v.optional(v.any()), // Campo extensible
   })
     .index("por_email", ["email"])
+    .index("por_rol_id", ["rol_id"])
     .index("por_es_st", ["es_st"]),
 
   // ─────────────────────────────────────────────
